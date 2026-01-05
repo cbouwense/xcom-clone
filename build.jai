@@ -53,7 +53,7 @@ build_simple_examples :: () {
     {
         opts.output_type = .EXECUTABLE;
         opts.use_custom_link_command = true;
-        opts.output_executable_name = "Terraria Clone";
+        opts.output_executable_name = "XCOM Clone";
 
         ws := create_workspace(opts);
         Compiler.compiler_begin_intercept(ws);
@@ -82,9 +82,10 @@ build_simple_examples :: () {
             exe_name := sprint("%.exe", opts.output_executable_name);
             defer free(exe_name);
 
-            ico_data := Ico_File.create_ico_file_from_bitmap_filename("data/Terraria2/Item_54.png");
-            defer free(ico_data);
-            Windows_Resources.set_icon_by_data(exe_name, ico_data);
+            // TODO
+            // ico_data := Ico_File.create_ico_file_from_bitmap_filename("data/Terraria2/Item_54.png");
+            // defer free(ico_data);
+            // Windows_Resources.set_icon_by_data(exe_name, ico_data);
 
             manifest_options: Windows_Resources.Manifest_Options;
             Windows_Resources.add_manifest_to_executable(exe_name, manifest_options);
