@@ -1,0 +1,24 @@
+{
+	"folders": [
+		{
+			"name": "xcom-clone",
+			"path": "."
+		},
+		{
+			"name": "jai",
+			"path": "../../../../ThirdParty/jai"
+		},
+		{
+			"name": "raylib",
+			"path": "../../../../raylib/raylib"
+		},
+		{
+			"name": "raylib-jai",
+			"path": "../../../../ThirdParty/raylib-jai"
+		},
+		{
+			"path": "../terraria-clone"
+		}
+	],
+	"settings": {}
+}
