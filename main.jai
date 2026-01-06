@@ -23,9 +23,10 @@ window_height := 800;
 // Constants
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-SCALE :: 5;
+CAMERA_MOVE_SPEED :: 4;
+CAMERA_ZOOM_SPEED :: 0.3;
 
-TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
+SCALE :: 2;
 
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
 TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
@@ -33,6 +34,8 @@ TILEMAP_GENERAL_TILE_WIDTH   :: 32;
 TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
 TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
+
+TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Metagame state
@@ -51,6 +54,15 @@ tilemap_general_texture : Texture;
 init_textures :: () {
     tilemap_general_texture = LoadTexture("data/tilemap-general.png");
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Controls
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+move_camera_up    : bool;
+move_camera_down  : bool;
+move_camera_left  : bool;
+move_camera_right : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -99,10 +111,6 @@ Particle :: struct {
 
 data_folder: string;
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Globals
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 main :: () {
     random_seed(123456789);
 
@@ -127,8 +135,16 @@ main :: () {
 
     // Initialize controls
     controls: Controls;
+    controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
+    controls.move_camera_up[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W     };
+    controls.move_camera_down[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN  };
+    controls.move_camera_down[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S     };
+    controls.move_camera_left[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT  };
+    controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
+    controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
+    controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
 
-    derive_active_entities(camera);
+    // derive_active_entities(camera);
 
     while !WindowShouldClose() {
         defer reset_temporary_storage();
@@ -144,16 +160,34 @@ main :: () {
         // Input
         //
         {
-            // Meta controls
-            if IsKeyPressed(.KEY_P) paused          = !paused;
-            if IsKeyPressed(.KEY_G) debug_mode      = !debug_mode;
+            // Metagame controls
+            if IsKeyPressed(.KEY_P) paused     = !paused;
+            if IsKeyPressed(.KEY_G) debug_mode = !debug_mode;
+
+            // Game controls
+            move_camera_up    = control_is_down(controls.move_camera_up);
+            move_camera_down  = control_is_down(controls.move_camera_down);
+            move_camera_left  = control_is_down(controls.move_camera_left);
+            move_camera_right = control_is_down(controls.move_camera_right);
+
+            camera.zoom += mouse_wheel_move * CAMERA_ZOOM_SPEED;
         }
 
         //
         // Update
         //
         if !paused {
-            derive_active_entities(camera);
+            // derive_active_entities(camera);
+
+            // Update camera
+            {
+                if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED;
+                if move_camera_down  camera.target.y += CAMERA_MOVE_SPEED;
+                if move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED;
+                if move_camera_right camera.target.x += CAMERA_MOVE_SPEED;
+
+                camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
+            }
         }
 
         //
@@ -163,32 +197,38 @@ main :: () {
             BeginDrawing();
             defer EndDrawing();
 
-            for 0..5 {
-                DrawTexturePro(
-                    tilemap_general_texture,
-                    Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
-                    Rectangle.{xx ( it * TILEMAP_GENERAL_WORLD_WIDTH), 0, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT},
-                    Vector2.{ 0, 0 },
-                    0.0,
-                    WHITE,
-                );
+            ClearBackground(SKYBLUE);
+
+            // Draw world
+            {
+                print_vars(camera);
+                BeginMode2D(camera);
+                defer EndMode2D();
+
+                for col: 0..10 {
+                    for row: 0..10 {
+                        DrawTexturePro(
+                            tilemap_general_texture,
+                            Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
+                            Rectangle.{
+                                ifx col % 2 == 0
+                                    then cast(float32) col * TILEMAP_GENERAL_WORLD_WIDTH - TILEMAP_GENERAL_WORLD_WIDTH / 2.0
+                                    else cast(float32) col * TILEMAP_GENERAL_WORLD_WIDTH,
+                                xx (row * TILEMAP_GENERAL_WORLD_HEIGHT / 2.0),
+                                TILEMAP_GENERAL_WORLD_WIDTH,
+                                TILEMAP_GENERAL_WORLD_HEIGHT,
+                            },
+                            Vector2.{ 0, 0 },
+                            0.0,
+                            WHITE,
+                        );
+                    }
+                }
             }
 
-            ClearBackground(SKYBLUE);
+            
         }
     }
-}
-
-round_to_int :: (f: float) -> int {
-    i := cast(int) f;
-    decimal_part := abs(f) - abs(i);
-
-    if decimal_part >= 0.5 {
-        if f >= 0 return i + 1;
-        else      return i - 1;
-    }
-
-    return i;
 }
 
 get_colliding_by_rect :: (subject_rect: Rectangle, collidables: [] $T/interface *Entity) -> *Entity {
