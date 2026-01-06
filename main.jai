@@ -23,7 +23,16 @@ window_height := 800;
 // Constants
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+SCALE :: 5;
+
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
+
+TILEMAP_GENERAL_MAP_WIDTH    :: 320;
+TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
+TILEMAP_GENERAL_TILE_WIDTH   :: 32;
+TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
+TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
+TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Metagame state
@@ -34,7 +43,17 @@ paused           := false;
 debug_mode       := false;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Textures and texture maps
+// Textures
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+tilemap_general_texture : Texture;
+
+init_textures :: () {
+    tilemap_general_texture = LoadTexture("data/tilemap-general.png");
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Other
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Direction :: enum {
@@ -144,15 +163,20 @@ main :: () {
             BeginDrawing();
             defer EndDrawing();
 
+            for 0..5 {
+                DrawTexturePro(
+                    tilemap_general_texture,
+                    Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
+                    Rectangle.{xx ( it * TILEMAP_GENERAL_WORLD_WIDTH), 0, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT},
+                    Vector2.{ 0, 0 },
+                    0.0,
+                    WHITE,
+                );
+            }
+
             ClearBackground(SKYBLUE);
         }
     }
-}
-
-
-
-init_textures :: () {
-
 }
 
 round_to_int :: (f: float) -> int {
