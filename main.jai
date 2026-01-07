@@ -205,16 +205,27 @@ main :: () {
                 BeginMode2D(camera);
                 defer EndMode2D();
 
+
+                x := 0.0;
                 for col: 0..10 {
+                    defer x += TILEMAP_GENERAL_WORLD_WIDTH / 2.0;
+
+                    DrawText(tprint("%\0", col).data, xx x, 0, 12, GREEN);
+
+                    y := 0.0;
+                    if col % 2 == 1 {
+                        y += TILEMAP_GENERAL_WORLD_HEIGHT / 4.0;
+                    }
+                
                     for row: 0..10 {
+                        defer y += TILEMAP_GENERAL_WORLD_HEIGHT / 2.0;
+
                         DrawTexturePro(
                             tilemap_general_texture,
                             Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
                             Rectangle.{
-                                ifx col % 2 == 0
-                                    then cast(float32) col * TILEMAP_GENERAL_WORLD_WIDTH - TILEMAP_GENERAL_WORLD_WIDTH / 2.0
-                                    else cast(float32) col * TILEMAP_GENERAL_WORLD_WIDTH,
-                                xx (row * TILEMAP_GENERAL_WORLD_HEIGHT / 2.0),
+                                x,
+                                y,
                                 TILEMAP_GENERAL_WORLD_WIDTH,
                                 TILEMAP_GENERAL_WORLD_HEIGHT,
                             },
