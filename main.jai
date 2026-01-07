@@ -171,10 +171,10 @@ main :: () {
 
             tile := New(Tile);
             tile.bounding_points = .[
-                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25) },
-                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 1.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) },
-                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.75) },
-                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) },
+                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25) }, // north
+                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.75) }, // south
+                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 1.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) }, // east
+                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) }, // west
             ];
             tile.sprite_rect = Rectangle.{ x, y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
 
@@ -182,7 +182,7 @@ main :: () {
         }
     }
 
-    // derive_active_entities(camera);
+    derive_active_entities(*active_tiles, camera);
 
     while !WindowShouldClose() {
         defer reset_temporary_storage();
@@ -215,7 +215,7 @@ main :: () {
         // Update
         //
         if !paused {
-            // derive_active_entities(camera);
+            derive_active_entities(*active_tiles, camera);
 
             // Update camera
             {
@@ -243,39 +243,9 @@ main :: () {
                 BeginMode2D(camera);
                 defer EndMode2D();
 
-                // x := 0.0;
-                // for col: 0..10 {
-                //     defer x += TILEMAP_GENERAL_WORLD_WIDTH / 2.0;
-
-                //     DrawText(tprint("%\0", col).data, xx x, 0, 12, GREEN);
-
-                //     y := 0.0;
-                //     if col % 2 == 1 {
-                //         y += TILEMAP_GENERAL_WORLD_HEIGHT / 4.0;
-                //     }
-                
-                //     for row: 0..10 {
-                //         defer y += TILEMAP_GENERAL_WORLD_HEIGHT / 2.0;
-
-                //         DrawTexturePro(
-                //             tilemap_general_texture,
-                //             Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
-                //             Rectangle.{
-                //                 x,
-                //                 y,
-                //                 TILEMAP_GENERAL_WORLD_WIDTH,
-                //                 TILEMAP_GENERAL_WORLD_HEIGHT,
-                //             },
-                //             Vector2.{ 0, 0 },
-                //             0.0,
-                //             WHITE,
-                //         );
-                //     }
-                // }
-
                 hovered_tile : *Tile;
 
-                for tile: tiles {
+                for tile: active_tiles {
                     if CheckCollisionPointPoly(mouse_pos_in_world, cast(*Vector2)(*(tile.bounding_points)), 4) {
                         hovered_tile = tile;
                     }
@@ -309,6 +279,11 @@ main :: () {
                         GRAY,
                     );
                 }
+            }
+
+            // Draw debug
+            if debug_mode {
+                DrawFPS(10, 10);
             }
         }
     }
@@ -355,7 +330,20 @@ array_unordered_remove_entity_by_id :: inline (array: *[] $Entity, item: Entity,
  * This function has to be called every frame, so it has to be reasonably performant. There is a tradeoff between
  * accurate culling and not spending too much time processing what should be culled.
  */
-derive_active_entities :: (camera: Camera2D) {
+derive_active_entities :: (active_tiles: *[..] *Tile, camera: Camera2D) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
+
+    array_reset(active_tiles);
+
+    {
+        for tile: tiles {
+            if tile.bounding_points[0].y > window_end.y   continue; // north
+            if tile.bounding_points[1].y < window_start.y continue; // south
+            if tile.bounding_points[2].x < window_start.x continue; // east
+            if tile.bounding_points[3].x > window_end.x   continue; // west
+
+            array_add(active_tiles, tile);
+        }
+    }
 }
