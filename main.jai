@@ -98,6 +98,11 @@ Entity :: struct {
     health_curr    : float32;
 }
 
+Tile :: struct {
+    sprite_rect : Rectangle;
+    bounding_points : [4] Vector2;
+}
+
 ParticleType :: enum {
     SPARK;
     BLOCK_BIT;
@@ -110,6 +115,8 @@ Particle :: struct {
 }
 
 data_folder: string;
+
+tiles : [..] *Tile;
 
 main :: () {
     random_seed(123456789);
@@ -143,6 +150,37 @@ main :: () {
     controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
     controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
     controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
+
+    active_tiles : [..] *Tile;
+    active_tiles.allocator = temp; // TODO: this is wrong
+
+    // Initialize tiles
+    x := 0.0;
+    for col: 0..10 {
+        defer x += TILEMAP_GENERAL_WORLD_WIDTH / 2.0;
+
+        DrawText(tprint("%\0", col).data, xx x, 0, 12, GREEN);
+
+        y := 0.0;
+        if col % 2 == 1 {
+            y += TILEMAP_GENERAL_WORLD_HEIGHT / 4.0;
+        }
+    
+        for row: 0..10 {
+            defer y += TILEMAP_GENERAL_WORLD_HEIGHT / 2.0;
+
+            tile := New(Tile);
+            tile.bounding_points = .[
+                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25) },
+                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 1.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) },
+                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.75) },
+                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) },
+            ];
+            tile.sprite_rect = Rectangle.{ x, y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+
+            array_add(*tiles, tile);
+        }
+    }
 
     // derive_active_entities(camera);
 
@@ -205,39 +243,73 @@ main :: () {
                 BeginMode2D(camera);
                 defer EndMode2D();
 
+                // x := 0.0;
+                // for col: 0..10 {
+                //     defer x += TILEMAP_GENERAL_WORLD_WIDTH / 2.0;
 
-                x := 0.0;
-                for col: 0..10 {
-                    defer x += TILEMAP_GENERAL_WORLD_WIDTH / 2.0;
+                //     DrawText(tprint("%\0", col).data, xx x, 0, 12, GREEN);
 
-                    DrawText(tprint("%\0", col).data, xx x, 0, 12, GREEN);
-
-                    y := 0.0;
-                    if col % 2 == 1 {
-                        y += TILEMAP_GENERAL_WORLD_HEIGHT / 4.0;
-                    }
+                //     y := 0.0;
+                //     if col % 2 == 1 {
+                //         y += TILEMAP_GENERAL_WORLD_HEIGHT / 4.0;
+                //     }
                 
-                    for row: 0..10 {
-                        defer y += TILEMAP_GENERAL_WORLD_HEIGHT / 2.0;
+                //     for row: 0..10 {
+                //         defer y += TILEMAP_GENERAL_WORLD_HEIGHT / 2.0;
 
-                        DrawTexturePro(
-                            tilemap_general_texture,
-                            Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
-                            Rectangle.{
-                                x,
-                                y,
-                                TILEMAP_GENERAL_WORLD_WIDTH,
-                                TILEMAP_GENERAL_WORLD_HEIGHT,
-                            },
-                            Vector2.{ 0, 0 },
-                            0.0,
-                            WHITE,
-                        );
+                //         DrawTexturePro(
+                //             tilemap_general_texture,
+                //             Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
+                //             Rectangle.{
+                //                 x,
+                //                 y,
+                //                 TILEMAP_GENERAL_WORLD_WIDTH,
+                //                 TILEMAP_GENERAL_WORLD_HEIGHT,
+                //             },
+                //             Vector2.{ 0, 0 },
+                //             0.0,
+                //             WHITE,
+                //         );
+                //     }
+                // }
+
+                hovered_tile : *Tile;
+
+                for tile: tiles {
+                    if CheckCollisionPointPoly(mouse_pos_in_world, cast(*Vector2)(*(tile.bounding_points)), 4) {
+                        hovered_tile = tile;
+                    }
+
+                    DrawTexturePro(
+                        tilemap_general_texture,
+                        Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
+                        tile.sprite_rect,
+                        Vector2.{ 0, 0 },
+                        0.0,
+                        WHITE,
+                    );
+
+                    for point: tile.bounding_points {
+                        color := RED;
+                        if it_index == 1 color = ORANGE;
+                        if it_index == 2 color = YELLOW;
+                        if it_index == 3 color = GREEN;
+                        DrawCircleV(point, 2.0, color);
                     }
                 }
-            }
 
-            
+                // Redraw hovered tile so it is drawn above all other tiles.
+                if hovered_tile != null {
+                    DrawTexturePro(
+                        tilemap_general_texture,
+                        Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
+                        hovered_tile.sprite_rect,
+                        Vector2.{ 0, 0 },
+                        0.0,
+                        GRAY,
+                    );
+                }
+            }
         }
     }
 }
