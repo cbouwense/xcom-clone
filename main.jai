@@ -28,13 +28,6 @@ CAMERA_ZOOM_SPEED :: 0.3;
 
 SCALE :: 2;
 
-TILEMAP_GENERAL_MAP_WIDTH    :: 320;
-TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
-TILEMAP_GENERAL_TILE_WIDTH   :: 32;
-TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
-TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
-TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
-
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -49,11 +42,47 @@ debug_mode       := false;
 // Textures
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-tilemap_general_texture : Texture;
+TILEMAP_GENERAL_MAP_WIDTH    :: 320;
+TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
+TILEMAP_GENERAL_TILE_WIDTH   :: 32;
+TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
+TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
+TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
+
+TILEMAP_DISHES_MAP_WIDTH    :: 320;
+TILEMAP_DISHES_MAP_HEIGHT   :: 320;
+TILEMAP_DISHES_TILE_WIDTH   :: 32;
+TILEMAP_DISHES_TILE_HEIGHT  :: 32;
+TILEMAP_DISHES_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
+TILEMAP_DISHES_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
+
+tilemap_texture_general : Texture;
+tilemap_texture_dishes  : Texture;
 
 init_textures :: () {
-    tilemap_general_texture = LoadTexture("data/tilemap-general.png");
+    tilemap_texture_general = LoadTexture("data/tilemap-general.png");
+    tilemap_texture_dishes  = LoadTexture("data/tilemap-dishes.png");
 }
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Sprites
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// SPRITE_DISH_FIRST_FRAME :: 0;
+
+// active_sprites_dishes : [..] *Sprite; // TODO: unsure
+
+// sprite_dish    : Sprite;
+
+// init_sprites :: () {
+//     sprite_dish = Sprite.{
+//         tilemap     = tilemap_texture_dishes,
+//         first_frame = SPRITE_DISH_FIRST_FRAME,
+//         color       = WHITE,
+//     };
+
+//     array_add(*active_sprites_dishes, *sprite_dish);
+// }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Controls
@@ -67,6 +96,13 @@ move_camera_right : bool;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+global_id_counter : s32;
+
+BOUNDING_POINT_INDEX_NORTH :: 0;
+BOUNDING_POINT_INDEX_SOUTH :: 2;
+BOUNDING_POINT_INDEX_EAST  :: 1;
+BOUNDING_POINT_INDEX_WEST  :: 3;
 
 Direction :: enum {
     NORTH;
@@ -116,7 +152,8 @@ Particle :: struct {
 
 data_folder: string;
 
-tiles : [..] *Tile;
+tiles  : [..] *Tile;
+dishes : [..] *Entity;
 
 main :: () {
     random_seed(123456789);
@@ -133,13 +170,6 @@ main :: () {
 
     init_textures();
 
-    // Initialize camera
-    camera: Camera2D;
-    camera.target   = Vector2.{};
-    camera.offset   = Vector2.{};
-    camera.rotation = 0.0;
-    camera.zoom     = 1;
-
     // Initialize controls
     controls: Controls;
     controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
@@ -155,32 +185,56 @@ main :: () {
     active_tiles.allocator = temp; // TODO: this is wrong
 
     // Initialize tiles
-    x := 0.0;
-    for col: 0..10 {
-        defer x += TILEMAP_GENERAL_WORLD_WIDTH / 2.0;
+    {
+        x := 0.0;
+        for col: 0..10 {
+            defer x += TILEMAP_GENERAL_WORLD_WIDTH / 2.0;
 
-        DrawText(tprint("%\0", col).data, xx x, 0, 12, GREEN);
+            y := 0.0;
+            if col % 2 == 1 {
+                y += TILEMAP_GENERAL_WORLD_HEIGHT / 4.0;
+            }
+        
+            for row: 0..10 {
+                defer y += TILEMAP_GENERAL_WORLD_HEIGHT / 2.0;
 
-        y := 0.0;
-        if col % 2 == 1 {
-            y += TILEMAP_GENERAL_WORLD_HEIGHT / 4.0;
-        }
-    
-        for row: 0..10 {
-            defer y += TILEMAP_GENERAL_WORLD_HEIGHT / 2.0;
+                tile := New(Tile);
+                tile.bounding_points = .[
+                    Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25) }, // north
+                    Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 1.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) }, // east
+                    Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.75) }, // south
+                    Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) }, // west
+                ];
+                tile.sprite_rect = Rectangle.{ x, y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
 
-            tile := New(Tile);
-            tile.bounding_points = .[
-                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25) }, // north
-                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.75) }, // south
-                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 1.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) }, // east
-                Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) }, // west
-            ];
-            tile.sprite_rect = Rectangle.{ x, y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-
-            array_add(*tiles, tile);
+                array_add(*tiles, tile);
+            }
         }
     }
+
+    // Initialize dishes
+    {
+        dish := New(Entity);
+        dish.id = read_then_increment(*global_id_counter);
+        // dish.type : Type;
+        dish.pos                    = Vector2.{ 100, 100 };
+        dish.vel                    = Vector2.{};
+        dish.is_facing_south_east   = true; // TODO: ?
+        dish.bounding_rect          = Rectangle.{ 0, 0, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+        dish.sprite_rect            = Rectangle.{ 0, 0, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+        dish.texture_map_source_pos = Vector2.{ 0, 0 };
+        dish.health_max             = 100.0;
+        dish.health_curr            = 100.0;
+
+        array_add(*dishes, dish);
+    }
+
+    // Initialize camera
+    camera: Camera2D;
+    camera.target   = tiles[50].bounding_points[BOUNDING_POINT_INDEX_EAST];
+    camera.offset   = Vector2.{};
+    camera.rotation = 0.0;
+    camera.zoom     = 2;
 
     derive_active_entities(*active_tiles, camera);
 
@@ -239,45 +293,53 @@ main :: () {
 
             // Draw world
             {
-                print_vars(camera);
                 BeginMode2D(camera);
                 defer EndMode2D();
 
-                hovered_tile : *Tile;
+                // Draw tiles
+                {
+                    hovered_tile : *Tile;
+                    for tile: active_tiles {
+                        // first_point : *Vector2 = 
+                        if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
+                            hovered_tile = tile;
+                        }
 
-                for tile: active_tiles {
-                    if CheckCollisionPointPoly(mouse_pos_in_world, cast(*Vector2)(*(tile.bounding_points)), 4) {
-                        hovered_tile = tile;
+                        DrawTexturePro(
+                            tilemap_texture_general,
+                            Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
+                            tile.sprite_rect,
+                            Vector2.{ 0, 0 },
+                            0.0,
+                            WHITE,
+                        );
                     }
 
-                    DrawTexturePro(
-                        tilemap_general_texture,
-                        Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
-                        tile.sprite_rect,
-                        Vector2.{ 0, 0 },
-                        0.0,
-                        WHITE,
-                    );
-
-                    for point: tile.bounding_points {
-                        color := RED;
-                        if it_index == 1 color = ORANGE;
-                        if it_index == 2 color = YELLOW;
-                        if it_index == 3 color = GREEN;
-                        DrawCircleV(point, 2.0, color);
+                    // Redraw hovered tile so it is drawn above all other tiles.
+                    if hovered_tile != null {
+                        DrawTexturePro(
+                            tilemap_texture_general,
+                            Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
+                            hovered_tile.sprite_rect,
+                            Vector2.{ 0, 0 },
+                            0.0,
+                            GRAY,
+                        );
                     }
                 }
 
-                // Redraw hovered tile so it is drawn above all other tiles.
-                if hovered_tile != null {
-                    DrawTexturePro(
-                        tilemap_general_texture,
-                        Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
-                        hovered_tile.sprite_rect,
-                        Vector2.{ 0, 0 },
-                        0.0,
-                        GRAY,
-                    );
+                // Draw dishes
+                {
+                    for dish: dishes {
+                        DrawTexturePro(
+                            tilemap_texture_dishes,
+                            Rectangle.{ 0, 0, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT },
+                            dish.sprite_rect,
+                            Vector2.{ 0, 0 },
+                            0.0,
+                            WHITE,
+                        );
+                    }
                 }
             }
 
