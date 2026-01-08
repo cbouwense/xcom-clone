@@ -53,8 +53,8 @@ TILEMAP_DISHES_MAP_WIDTH    :: 320;
 TILEMAP_DISHES_MAP_HEIGHT   :: 320;
 TILEMAP_DISHES_TILE_WIDTH   :: 32;
 TILEMAP_DISHES_TILE_HEIGHT  :: 32;
-TILEMAP_DISHES_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
-TILEMAP_DISHES_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
+TILEMAP_DISHES_WORLD_WIDTH  :: TILEMAP_DISHES_TILE_WIDTH; // Intentionally no scale
+TILEMAP_DISHES_WORLD_HEIGHT :: TILEMAP_DISHES_TILE_HEIGHT; // Intentionally no scale
 
 tilemap_texture_general : Texture;
 tilemap_texture_dishes  : Texture;
@@ -67,22 +67,6 @@ init_textures :: () {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Sprites
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// SPRITE_DISH_FIRST_FRAME :: 0;
-
-// active_sprites_dishes : [..] *Sprite; // TODO: unsure
-
-// sprite_dish    : Sprite;
-
-// init_sprites :: () {
-//     sprite_dish = Sprite.{
-//         tilemap     = tilemap_texture_dishes,
-//         first_frame = SPRITE_DISH_FIRST_FRAME,
-//         color       = WHITE,
-//     };
-
-//     array_add(*active_sprites_dishes, *sprite_dish);
-// }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Controls
@@ -98,6 +82,7 @@ move_camera_right : bool;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 global_id_counter : s32;
+global_tile_pos_to_tile : Table(string, *Tile);
 
 BOUNDING_POINT_INDEX_NORTH :: 0;
 BOUNDING_POINT_INDEX_SOUTH :: 2;
@@ -135,6 +120,7 @@ Entity :: struct {
 }
 
 Tile :: struct {
+    pos : Vector2;
     sprite_rect : Rectangle;
     bounding_points : [4] Vector2;
 }
@@ -157,6 +143,13 @@ dishes : [..] *Entity;
 
 main :: () {
     random_seed(123456789);
+
+    // Initialize globals
+    {
+        // TODO: why did I seemingly not need this?...
+        init(*global_tile_pos_to_tile);
+        defer deinit(*global_tile_pos_to_tile);
+    }
 
     InitWindow(1600, 900, "XCOM Clone");
     defer CloseWindow();
@@ -181,9 +174,6 @@ main :: () {
     controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
     controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
 
-    active_tiles : [..] *Tile;
-    active_tiles.allocator = temp; // TODO: this is wrong
-
     // Initialize tiles
     {
         x := 0.0;
@@ -198,30 +188,37 @@ main :: () {
             for row: 0..10 {
                 defer y += TILEMAP_GENERAL_WORLD_HEIGHT / 2.0;
 
+                north := Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25) };
+                south := Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.75) };
+                east  := Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 1.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) };
+                west  := Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) };
+
                 tile := New(Tile);
-                tile.bounding_points = .[
-                    Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25) }, // north
-                    Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 1.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) }, // east
-                    Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.75) }, // south
-                    Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) }, // west
-                ];
+                tile.pos = Vector2.{ north.x, north.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25 }; // 25% because the actual sprite height is only half its tile height
+                tile.bounding_points = .[north, east, south, west];
                 tile.sprite_rect = Rectangle.{ x, y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
 
                 array_add(*tiles, tile);
+                table_add(*global_tile_pos_to_tile, vector2_to_string_permanent(tile.pos), tile);
             }
         }
     }
 
     // Initialize dishes
     {
+        pos := Vector2.{
+            tiles[0].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
+            tiles[0].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
+        };
+
         dish := New(Entity);
         dish.id = read_then_increment(*global_id_counter);
         // dish.type : Type;
-        dish.pos                    = Vector2.{ 100, 100 };
+        dish.pos                    = pos;
         dish.vel                    = Vector2.{};
         dish.is_facing_south_east   = true; // TODO: ?
-        dish.bounding_rect          = Rectangle.{ 0, 0, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
-        dish.sprite_rect            = Rectangle.{ 0, 0, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+        dish.bounding_rect          = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+        dish.sprite_rect            = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
         dish.texture_map_source_pos = Vector2.{ 0, 0 };
         dish.health_max             = 100.0;
         dish.health_curr            = 100.0;
@@ -235,8 +232,6 @@ main :: () {
     camera.offset   = Vector2.{};
     camera.rotation = 0.0;
     camera.zoom     = 2;
-
-    derive_active_entities(*active_tiles, camera);
 
     while !WindowShouldClose() {
         defer reset_temporary_storage();
@@ -269,8 +264,6 @@ main :: () {
         // Update
         //
         if !paused {
-            derive_active_entities(*active_tiles, camera);
-
             // Update camera
             {
                 if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED;
@@ -299,7 +292,7 @@ main :: () {
                 // Draw tiles
                 {
                     hovered_tile : *Tile;
-                    for tile: active_tiles {
+                    for tile: tiles {
                         // first_point : *Vector2 = 
                         if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
                             hovered_tile = tile;
@@ -333,12 +326,16 @@ main :: () {
                     for dish: dishes {
                         DrawTexturePro(
                             tilemap_texture_dishes,
-                            Rectangle.{ 0, 0, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT },
+                            Rectangle.{ 0, 0, TILEMAP_DISHES_TILE_WIDTH, TILEMAP_DISHES_TILE_HEIGHT },
                             dish.sprite_rect,
                             Vector2.{ 0, 0 },
                             0.0,
                             WHITE,
                         );
+
+                        if debug_mode {
+                            DrawRectangleLinesEx(dish.sprite_rect, 1.0, LIME);
+                        }
                     }
                 }
             }
@@ -381,31 +378,4 @@ array_unordered_remove_entity_by_id :: inline (array: *[] $Entity, item: Entity,
     }
 
     return removed;
-}
-
-/**
- * derive_active_entities determines which entities should be processed each frame based on if they fall within the
- * viewport or not. If they don't they are neither updated nor drawn to save frames. Every time there is a new entity
- * type, it should probably be added to this function. It clears the arrays of active entities passed into it and adds
- * in the entities that should be processed that frame.
- * 
- * This function has to be called every frame, so it has to be reasonably performant. There is a tradeoff between
- * accurate culling and not spending too much time processing what should be culled.
- */
-derive_active_entities :: (active_tiles: *[..] *Tile, camera: Camera2D) {
-    window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
-    window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
-
-    array_reset(active_tiles);
-
-    {
-        for tile: tiles {
-            if tile.bounding_points[0].y > window_end.y   continue; // north
-            if tile.bounding_points[1].y < window_start.y continue; // south
-            if tile.bounding_points[2].x < window_start.x continue; // east
-            if tile.bounding_points[3].x > window_end.x   continue; // west
-
-            array_add(active_tiles, tile);
-        }
-    }
 }
