@@ -79,6 +79,7 @@ move_camera_up    : bool;
 move_camera_down  : bool;
 move_camera_left  : bool;
 move_camera_right : bool;
+go_to_next_phase  : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -99,7 +100,7 @@ GameStatePhase :: enum {
 
 GameState :: struct {
     phase : GameStatePhase;
-    entity_active : *Entity;
+    active_entity : *Entity;
 }
 
 UnitStatePhase :: enum {
@@ -210,6 +211,7 @@ main :: () {
         controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
         controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
         controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
+        controls.go_to_next_phase[0]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_ZERO  };
     }
 
     // Initialize tiles
@@ -271,7 +273,7 @@ main :: () {
     // Initialize game
     game_state := GameState.{
         phase = .CLEANERS,
-        entity_active = cleaners[0],
+        active_entity = cleaners[0],
     };
 
     while !WindowShouldClose() {
@@ -297,6 +299,7 @@ main :: () {
             move_camera_down  = control_is_down(controls.move_camera_down);
             move_camera_left  = control_is_down(controls.move_camera_left);
             move_camera_right = control_is_down(controls.move_camera_right);
+            go_to_next_phase  = control_is_pressed(controls.go_to_next_phase);
 
             camera.zoom += mouse_wheel_move * CAMERA_ZOOM_SPEED;
         }
@@ -315,23 +318,25 @@ main :: () {
                 camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
             }
 
-            if #complete game_state.phase == {
-                case .CLEANERS;
-                    active_cleaner := game_state.entity_active;
+            if go_to_next_phase {
+                tiles[game_state.active_entity.on_tile_id].tile_state = .DEFAULT;
 
-                    // Wave it up and down
-                    active_cleaner.sprite_rect.y -= xx sin(time * 3.0) / 10.0;
-
-                    // Highlight the tile it's on
-                    // TODO: should this happen in a transition?
-                    // TODO: we should probably just have a function that, given a pos, snaps to the nearest tile pos,
-                    // and then looks up the tile by string id. or something
-                    tile := tiles[active_cleaner.on_tile_id];
-                    tile.tile_state = .ACTIVE;
-
-                case .DISHES;
-
+                if #complete game_state.phase == {
+                    case .CLEANERS;
+                        game_state.phase = .DISHES;
+                        game_state.active_entity = dishes[0];
+                    case .DISHES;
+                        game_state.phase = .CLEANERS;
+                        game_state.active_entity = cleaners[0];
+                }
+                
             }
+
+            // Update active tile
+            tiles[game_state.active_entity.on_tile_id].tile_state = .ACTIVE;
+
+            // Update active entity
+            game_state.active_entity.sprite_rect.y -= xx sin(time * 3.0) / 10.0;
         }
 
         //

@@ -8,6 +8,7 @@ Controls :: struct {
     move_camera_down  : [3] Control;
     move_camera_left  : [3] Control;
     move_camera_right : [3] Control;
+    go_to_next_phase  : [3] Control;
 }
 
 control_is_down :: (haystack: [] Control) -> bool {
