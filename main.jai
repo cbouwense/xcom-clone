@@ -101,9 +101,14 @@ Direction :: enum {
     CENTER; // essentially no direction
 }
 
+EntityType :: enum {
+    DIRTY_PLATE;
+    SPONGE;
+}
+
 Entity :: struct {
     id   : s32;
-    type : Type;
+    type : EntityType;
 
     pos : Vector2;
     vel : Vector2;
@@ -138,8 +143,9 @@ Particle :: struct {
 
 data_folder: string;
 
-tiles  : [..] *Tile;
-dishes : [..] *Entity;
+tiles    : [..] *Tile;
+dishes   : [..] *Entity;
+cleaners : [..] *Entity;
 
 main :: () {
     random_seed(123456789);
@@ -206,14 +212,15 @@ main :: () {
 
     // Initialize dishes
     {
+        // TODO: probably want a function you can just give a tile id and get pos like this
         pos := Vector2.{
             tiles[0].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
             tiles[0].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
         };
 
         dish := New(Entity);
-        dish.id = read_then_increment(*global_id_counter);
-        // dish.type : Type;
+        dish.id                     = read_then_increment(*global_id_counter);
+        dish.type                   = .DIRTY_PLATE;
         dish.pos                    = pos;
         dish.vel                    = Vector2.{};
         dish.is_facing_south_east   = true; // TODO: ?
@@ -224,6 +231,29 @@ main :: () {
         dish.health_curr            = 100.0;
 
         array_add(*dishes, dish);
+    }
+
+    // Initialize cleaners
+    {
+        // TODO: probably want a function you can just give a tile id and get pos like this
+        pos := Vector2.{
+            tiles[9].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
+            tiles[9].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
+        };
+
+        sponge := New(Entity);
+        sponge.id                     = read_then_increment(*global_id_counter);
+        sponge.type                   = .SPONGE;
+        sponge.pos                    = pos;
+        sponge.vel                    = Vector2.{};
+        sponge.is_facing_south_east   = true; // TODO: ?
+        sponge.bounding_rect          = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+        sponge.sprite_rect            = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+        sponge.texture_map_source_pos = Vector2.{ 0, 1 };
+        sponge.health_max             = 100.0;
+        sponge.health_curr            = 100.0;
+
+        array_add(*cleaners, sponge);
     }
 
     // Initialize camera
@@ -322,22 +352,10 @@ main :: () {
                 }
 
                 // Draw dishes
-                {
-                    for dish: dishes {
-                        DrawTexturePro(
-                            tilemap_texture_dishes,
-                            Rectangle.{ 0, 0, TILEMAP_DISHES_TILE_WIDTH, TILEMAP_DISHES_TILE_HEIGHT },
-                            dish.sprite_rect,
-                            Vector2.{ 0, 0 },
-                            0.0,
-                            WHITE,
-                        );
+                for dish: dishes draw_entity(dish);
 
-                        if debug_mode {
-                            DrawRectangleLinesEx(dish.sprite_rect, 1.0, LIME);
-                        }
-                    }
-                }
+                // Draw cleaners
+                for cleaner: cleaners draw_entity(cleaner);
             }
 
             // Draw debug
@@ -378,4 +396,39 @@ array_unordered_remove_entity_by_id :: inline (array: *[] $Entity, item: Entity,
     }
 
     return removed;
+}
+
+get_draw_info_for_entity :: (entity: Entity) -> texture: Texture, source: Rectangle {
+    if #complete entity.type == {
+        // TODO: DRY up?
+        case .DIRTY_PLATE; #through;
+        case .SPONGE;
+            map_texture := tilemap_texture_dishes;
+
+            map_source := Rectangle.{
+                entity.texture_map_source_pos.x * TILEMAP_DISHES_TILE_WIDTH,
+                entity.texture_map_source_pos.y * TILEMAP_DISHES_TILE_HEIGHT,
+                TILEMAP_DISHES_TILE_WIDTH,
+                TILEMAP_DISHES_TILE_HEIGHT,
+            };
+
+            return map_texture, map_source;
+    }
+}
+
+draw_entity :: (entity: Entity) {
+    texture, source_rect := get_draw_info_for_entity(entity);
+
+    DrawTexturePro(
+        texture,
+        source_rect,
+        entity.sprite_rect,
+        Vector2.{ 0, 0 },
+        0.0,
+        WHITE,
+    );
+
+    if debug_mode {
+        DrawRectangleLinesEx(entity.sprite_rect, 1.0, LIME);
+    }
 }
