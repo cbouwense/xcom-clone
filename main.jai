@@ -26,6 +26,9 @@ window_height := 800;
 CAMERA_MOVE_SPEED :: 4;
 CAMERA_ZOOM_SPEED :: 0.3;
 
+MAP_ROW_COUNT :: 10;
+MAP_COL_COUNT :: 10;
+
 SCALE :: 2;
 
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
@@ -171,19 +174,21 @@ main :: () {
 
     // Initialize controls
     controls: Controls;
-    controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
-    controls.move_camera_up[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W     };
-    controls.move_camera_down[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN  };
-    controls.move_camera_down[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S     };
-    controls.move_camera_left[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT  };
-    controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
-    controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
-    controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
+    {
+        controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
+        controls.move_camera_up[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W     };
+        controls.move_camera_down[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN  };
+        controls.move_camera_down[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S     };
+        controls.move_camera_left[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT  };
+        controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
+        controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
+        controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
+    }
 
     // Initialize tiles
     {
         x := 0.0;
-        for col: 0..10 {
+        for col: 0..MAP_COL_COUNT-1 {
             defer x += TILEMAP_GENERAL_WORLD_WIDTH / 2.0;
 
             y := 0.0;
@@ -191,7 +196,7 @@ main :: () {
                 y += TILEMAP_GENERAL_WORLD_HEIGHT / 4.0;
             }
         
-            for row: 0..10 {
+            for row: 0..MAP_ROW_COUNT-1 {
                 defer y += TILEMAP_GENERAL_WORLD_HEIGHT / 2.0;
 
                 north := Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.50), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25) };
@@ -212,48 +217,20 @@ main :: () {
 
     // Initialize dishes
     {
-        // TODO: probably want a function you can just give a tile id and get pos like this
-        pos := Vector2.{
-            tiles[0].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
-            tiles[0].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
-        };
-
-        dish := New(Entity);
-        dish.id                     = read_then_increment(*global_id_counter);
-        dish.type                   = .DIRTY_PLATE;
-        dish.pos                    = pos;
-        dish.vel                    = Vector2.{};
-        dish.is_facing_south_east   = true; // TODO: ?
-        dish.bounding_rect          = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
-        dish.sprite_rect            = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
-        dish.texture_map_source_pos = Vector2.{ 0, 0 };
-        dish.health_max             = 100.0;
-        dish.health_curr            = 100.0;
-
-        array_add(*dishes, dish);
+        tile_id_to_spawn_on : s32 = 0;
+        for 0..MAP_COL_COUNT-1 {
+            create_entity(.DIRTY_PLATE, tile_id_to_spawn_on);
+            tile_id_to_spawn_on += MAP_COL_COUNT;
+        }
     }
 
     // Initialize cleaners
     {
-        // TODO: probably want a function you can just give a tile id and get pos like this
-        pos := Vector2.{
-            tiles[9].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
-            tiles[9].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
-        };
-
-        sponge := New(Entity);
-        sponge.id                     = read_then_increment(*global_id_counter);
-        sponge.type                   = .SPONGE;
-        sponge.pos                    = pos;
-        sponge.vel                    = Vector2.{};
-        sponge.is_facing_south_east   = true; // TODO: ?
-        sponge.bounding_rect          = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
-        sponge.sprite_rect            = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
-        sponge.texture_map_source_pos = Vector2.{ 0, 1 };
-        sponge.health_max             = 100.0;
-        sponge.health_curr            = 100.0;
-
-        array_add(*cleaners, sponge);
+        tile_id_to_spawn_on : s32 = MAP_ROW_COUNT-1;
+        for 0..MAP_COL_COUNT-1 {
+            create_entity(.SPONGE, tile_id_to_spawn_on);
+            tile_id_to_spawn_on += MAP_COL_COUNT;
+        }
     }
 
     // Initialize camera
@@ -323,7 +300,6 @@ main :: () {
                 {
                     hovered_tile : *Tile;
                     for tile: tiles {
-                        // first_point : *Vector2 = 
                         if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
                             hovered_tile = tile;
                         }
@@ -364,6 +340,13 @@ main :: () {
             }
         }
     }
+}
+
+get_tile_pos_by_id :: (id: s32) -> Vector2 {
+    return Vector2.{
+        tiles[id].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
+        tiles[id].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
+    };
 }
 
 get_colliding_by_rect :: (subject_rect: Rectangle, collidables: [] $T/interface *Entity) -> *Entity {
@@ -431,4 +414,32 @@ draw_entity :: (entity: Entity) {
     if debug_mode {
         DrawRectangleLinesEx(entity.sprite_rect, 1.0, LIME);
     }
+}
+
+create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
+    pos := get_tile_pos_by_id(on_tile_id);
+
+    entity := New(Entity);
+    entity.id                     = read_then_increment(*global_id_counter);
+    entity.type                   = entity_type;
+    entity.pos                    = pos;
+    entity.vel                    = Vector2.{};
+    entity.is_facing_south_east   = true; // TODO: ?
+    entity.bounding_rect          = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+    entity.sprite_rect            = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+    // entity.texture_map_source_pos is set conditionally below
+    entity.health_max             = 100.0;
+    entity.health_curr            = 100.0;
+
+    if #complete entity_type == {
+        case .DIRTY_PLATE;
+            entity.texture_map_source_pos = Vector2.{ 0, 0 };
+            array_add(*dishes, entity);
+
+        case .SPONGE;
+            entity.texture_map_source_pos = Vector2.{ 0, 1 };
+            array_add(*cleaners, entity);
+    }
+
+    return entity;
 }
