@@ -92,6 +92,25 @@ BOUNDING_POINT_INDEX_SOUTH :: 2;
 BOUNDING_POINT_INDEX_EAST  :: 1;
 BOUNDING_POINT_INDEX_WEST  :: 3;
 
+GameStatePhase :: enum {
+    CLEANERS;
+    DISHES;
+}
+
+GameState :: struct {
+    phase : GameStatePhase;
+    entity_active : *Entity;
+}
+
+UnitStatePhase :: enum {
+    DECIDING;
+    ACTING;
+}
+
+UnitState :: struct {
+    phase : UnitStatePhase;
+}
+
 Direction :: enum {
     NORTH;
     NORTH_EAST;
@@ -125,9 +144,17 @@ Entity :: struct {
 
     health_max     : float32;
     health_curr    : float32;
+
+    on_tile_id : s32; // TODO: idk about this
+}
+
+TileState :: enum {
+    DEFAULT;
+    ACTIVE;
 }
 
 Tile :: struct {
+    tile_state: TileState;
     pos : Vector2;
     sprite_rect : Rectangle;
     bounding_points : [4] Vector2;
@@ -205,6 +232,7 @@ main :: () {
                 west  := Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) };
 
                 tile := New(Tile);
+                tile.tile_state = .DEFAULT;
                 tile.pos = Vector2.{ north.x, north.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25 }; // 25% because the actual sprite height is only half its tile height
                 tile.bounding_points = .[north, east, south, west];
                 tile.sprite_rect = Rectangle.{ x, y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
@@ -239,6 +267,12 @@ main :: () {
     camera.offset   = Vector2.{};
     camera.rotation = 0.0;
     camera.zoom     = 2;
+
+    // Initialize game
+    game_state := GameState.{
+        phase = .CLEANERS,
+        entity_active = cleaners[0],
+    };
 
     while !WindowShouldClose() {
         defer reset_temporary_storage();
@@ -280,6 +314,24 @@ main :: () {
 
                 camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
             }
+
+            if #complete game_state.phase == {
+                case .CLEANERS;
+                    active_cleaner := game_state.entity_active;
+
+                    // Wave it up and down
+                    active_cleaner.sprite_rect.y -= xx sin(time * 3.0) / 10.0;
+
+                    // Highlight the tile it's on
+                    // TODO: should this happen in a transition?
+                    // TODO: we should probably just have a function that, given a pos, snaps to the nearest tile pos,
+                    // and then looks up the tile by string id. or something
+                    tile := tiles[active_cleaner.on_tile_id];
+                    tile.tile_state = .ACTIVE;
+
+                case .DISHES;
+
+            }
         }
 
         //
@@ -300,6 +352,12 @@ main :: () {
                 {
                     hovered_tile : *Tile;
                     for tile: tiles {
+                        tint: Color;
+                        if #complete tile.tile_state == {
+                            case .DEFAULT; tint = LIGHTGRAY;
+                            case .ACTIVE;  tint = GOLD;
+                        }
+
                         if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
                             hovered_tile = tile;
                         }
@@ -310,7 +368,7 @@ main :: () {
                             tile.sprite_rect,
                             Vector2.{ 0, 0 },
                             0.0,
-                            WHITE,
+                            tint,
                         );
                     }
 
@@ -426,10 +484,11 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
     entity.vel                    = Vector2.{};
     entity.is_facing_south_east   = true; // TODO: ?
     entity.bounding_rect          = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
-    entity.sprite_rect            = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+    entity.sprite_rect            = get_default_sprite_rect(on_tile_id);
     // entity.texture_map_source_pos is set conditionally below
     entity.health_max             = 100.0;
     entity.health_curr            = 100.0;
+    entity.on_tile_id             = on_tile_id;
 
     if #complete entity_type == {
         case .DIRTY_PLATE;
@@ -442,4 +501,9 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
     }
 
     return entity;
+}
+
+get_default_sprite_rect :: (on_tile_id: s32) -> Rectangle {
+    pos := get_tile_pos_by_id(on_tile_id);
+    return Rectangle.{ pos.x, pos.y - TILEMAP_DISHES_WORLD_HEIGHT * 0.25, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
 }
