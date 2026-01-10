@@ -52,6 +52,9 @@ TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
 TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 
+TILE_WORLD_WIDTH  :: TILEMAP_GENERAL_WORLD_WIDTH;
+TILE_WORLD_HEIGHT :: TILEMAP_GENERAL_WORLD_HEIGHT * 0.50;
+
 TILEMAP_DISHES_MAP_WIDTH    :: 320;
 TILEMAP_DISHES_MAP_HEIGHT   :: 320;
 TILEMAP_DISHES_TILE_WIDTH   :: 32;
@@ -85,8 +88,11 @@ go_to_next_phase  : bool;
 // Other
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-global_id_counter : s32;
-global_tile_pos_to_tile : Table(string, *Tile);
+global_id_counter      : s32;
+global_tile_id_counter : s32;
+global_tile_pos_to_tile     : Table(string, *Tile);
+global_tile_id_to_tile      : Table(s32, *Tile);
+global_tile_id_to_neighbors : Table(s32, *[..] *Tile);
 
 BOUNDING_POINT_INDEX_NORTH :: 0;
 BOUNDING_POINT_INDEX_SOUTH :: 2;
@@ -155,6 +161,7 @@ TileState :: enum {
 }
 
 Tile :: struct {
+    id : s32;
     tile_state: TileState;
     pos : Vector2;
     sprite_rect : Rectangle;
@@ -186,6 +193,9 @@ main :: () {
         // TODO: why did I seemingly not need this?...
         init(*global_tile_pos_to_tile);
         defer deinit(*global_tile_pos_to_tile);
+
+        init(*global_tile_id_to_tile);
+        defer deinit(*global_tile_id_to_tile);
     }
 
     InitWindow(1600, 900, "XCOM Clone");
@@ -209,9 +219,9 @@ main :: () {
         controls.move_camera_down[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S     };
         controls.move_camera_left[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT  };
         controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
-        controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
+        // controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
         controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
-        controls.go_to_next_phase[0]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_ZERO  };
+        controls.go_to_next_phase[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT  };
     }
 
     // Initialize tiles
@@ -234,6 +244,7 @@ main :: () {
                 west  := Vector2.{ xx (x + TILEMAP_GENERAL_WORLD_WIDTH * 0.00), xx (y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.50) };
 
                 tile := New(Tile);
+                tile.id = read_then_increment(*global_tile_id_counter);
                 tile.tile_state = .DEFAULT;
                 tile.pos = Vector2.{ north.x, north.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25 }; // 25% because the actual sprite height is only half its tile height
                 tile.bounding_points = .[north, east, south, west];
@@ -241,7 +252,45 @@ main :: () {
 
                 array_add(*tiles, tile);
                 table_add(*global_tile_pos_to_tile, vector2_to_string_permanent(tile.pos), tile);
+                table_add(*global_tile_id_to_tile, tile.id, tile);
+
+                neighbor_list := New([..] *Tile);
+                table_add(*global_tile_id_to_neighbors, tile.id, neighbor_list);
             }
+        }
+
+        for global_tile_id_to_tile {
+            tile_id, tile := it_index, it;
+            print("%: %\n", tile_id, tile.pos);
+        }
+
+        // Initialize tile neighbor table
+        for tile: tiles {
+            neighbor_list_exists, neighbor_list := table_find_new(*global_tile_id_to_neighbors, tile.id);
+            assert(neighbor_list_exists, "Could not find neighbor list for tile id %\n", tile.id);
+
+            add_neighbor_if_it_exists :: (tile: *Tile, neighbor_list: *[..] *Tile, dx: float32, dy: float32) {
+                neighbor_pos := Vector2.{ tile.pos.x + dx, tile.pos.y + dy };
+                neighbor_exists, neighbor := table_find_new(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
+                print("% looking at %, found %\n", tile.id, neighbor_pos, ifx neighbor_exists then neighbor.id else 0);
+                if neighbor_exists array_add(neighbor_list, neighbor);
+            }
+ 
+            add_neighbor_if_it_exists(tile, neighbor_list, 0.0, -TILE_WORLD_HEIGHT); // north
+            add_neighbor_if_it_exists(tile, neighbor_list, 0.0, +TILE_WORLD_HEIGHT); // south
+            add_neighbor_if_it_exists(tile, neighbor_list, +TILE_WORLD_WIDTH, 0.0); // east
+            add_neighbor_if_it_exists(tile, neighbor_list, -TILE_WORLD_WIDTH, 0.0); // west
+            add_neighbor_if_it_exists(tile, neighbor_list, +TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50); // north east
+            add_neighbor_if_it_exists(tile, neighbor_list, -TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50); // north west
+            add_neighbor_if_it_exists(tile, neighbor_list, +TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50); // south east
+            add_neighbor_if_it_exists(tile, neighbor_list, -TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50); // south west
+        }
+
+        for global_tile_id_to_neighbors {
+            tile_id, neighbors := it_index, it;
+            print("%: [", tile_id);
+            for n: neighbors.* print("%, ", n.id);
+            print("]\n");
         }
     }
 
@@ -375,6 +424,16 @@ main :: () {
                             0.0,
                             tint,
                         );
+
+                        if debug_mode {
+                             DrawText(
+                                tprint("%\0", tile.id).data,
+                                xx (tile.pos.x),// + TILE_WORLD_WIDTH  * 0.50),
+                                xx (tile.pos.y),// + TILE_WORLD_HEIGHT * 0.50),
+                                12,
+                                WHITE,
+                            );
+                        }
                     }
 
                     // Redraw hovered tile so it is drawn above all other tiles.
