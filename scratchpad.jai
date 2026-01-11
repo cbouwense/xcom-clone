@@ -17,5 +17,6 @@ main :: () {
       Edge.{1, 2, 17.38},
     ];
 
-    dijkstra(0, 2, edges);
+    shortest_path := dijkstra(0, 2, edges);
+    print_vars(shortest_path);
 }
