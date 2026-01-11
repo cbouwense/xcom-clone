@@ -1,3 +1,7 @@
+#import "Basic";
+#import "Hash_Table";
+#import "Math";
+
 read_then_increment :: (x: *s32, increment: s32 = 1) -> s32 {
     defer x.* += increment;
     return x.*;
@@ -22,7 +26,7 @@ Edge :: struct {
 }
 
 /**
- * Finds the shortest path between two nodes in a finite weighted directed graph.
+ * Finds the shortest path between two nodes in a finite weighted graph.
  * Returns the shortest path in an array starting with the start id and ending with
  * the target id.
  * 
@@ -40,7 +44,7 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
     ids_to_distances  : Table(Key_Type = s32, Value_Type = float32); // id to distance from start value
     priority_queue    : Table(Key_Type = s32, Value_Type = Any);     // setting Value_Type as Any because we're using this as a Set
     visited_nodes_set : Table(Key_Type = s32, Value_Type = Any);     // setting Value_Type as Any because we're using this as a Set
-    predecessor_of_id_is_id : Table(Key_Type = s32, Value_Type = s32);
+    predecessors      : Table(Key_Type = s32, Value_Type = s32);
 
     for edge: edges {
         table_set(*ids_to_distances, edge.from, FLOAT32_INFINITY);
@@ -70,31 +74,20 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
         return closest_node_id != -1, closest_node_id;
     }
 
-    for priority_queue {
+    while priority_queue.count > 0 {
         found_closest_node, current_node_id := find_closest_node_id(priority_queue, ids_to_distances);
         assert(found_closest_node);
-        if current_node_id == target_id break;
 
-        print("identified % as closest node\n", current_node_id);
+        if current_node_id == target_id break;
 
         // Consider all of its neighbors and update their distances through the current node
         for edge: edges {
-            node_id, neighbor_id : s32 = -1;
+            node_id     := edge.from;
+            neighbor_id := edge.to;
 
-            if edge.from != current_node_id && edge.to != current_node_id continue;
-
-            if edge.from == current_node_id {
-                node_id     = edge.from;
-                neighbor_id = edge.to;
-            }
-
-            if edge.to == current_node_id {
-                node_id     = edge.to;
-                neighbor_id = edge.from;
-            }
+            if node_id != current_node_id continue;
 
             neighbor_already_visited, _ := table_find_new(*visited_nodes_set, neighbor_id);
-            print_vars(node_id, neighbor_id, neighbor_already_visited);
             if neighbor_already_visited continue;
 
             current_node_distance_exists, current_node_distance         := table_find_new(*ids_to_distances, node_id);
@@ -105,14 +98,12 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
             assert(current_node_distance_exists);
             assert(current_neighbor_distance_exists);
 
-            // print_vars(node_id, neighbor_id, current_node_distance, current_neighbor_distance);
-
             potential_neighbor_distance := current_node_distance + edge.distance;
 
             if potential_neighbor_distance < current_neighbor_distance {
                 table_set(*ids_to_distances, neighbor_id, potential_neighbor_distance);
                 table_set(*priority_queue, neighbor_id, null);
-                table_set(*predecessor_of_id_is_id, neighbor_id, current_node_id);
+                table_set(*predecessors, neighbor_id, current_node_id);
             }
         }
 
@@ -127,7 +118,7 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
 
     while true {
         array_add(*reverse_path, current_node_id);
-        next_predecessor_found, next_predecessor := table_find_new(*predecessor_of_id_is_id, current_node_id);
+        next_predecessor_found, next_predecessor := table_find_new(*predecessors, current_node_id);
         if !next_predecessor_found break;
         current_node_id = next_predecessor;
     }
