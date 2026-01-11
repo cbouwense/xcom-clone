@@ -184,6 +184,9 @@ data_folder: string;
 tiles    : [..] *Tile;
 dishes   : [..] *Entity;
 cleaners : [..] *Entity;
+edges    : [..] Edge; // List of edges between tiles for pathfinding
+
+target_tile : *Tile = null;
 
 main :: () {
     random_seed(123456789);
@@ -249,10 +252,10 @@ main :: () {
             }
         }
 
-        for global_tile_id_to_tile {
-            tile_id, tile := it_index, it;
-            print("%: %\n", tile_id, tile.pos);
-        }
+        // for global_tile_id_to_tile {
+        //     tile_id, tile := it_index, it;
+        //     print("%: %\n", tile_id, tile.pos);
+        // }
 
         // Initialize tile neighbor table
         for tile: tiles {
@@ -262,7 +265,6 @@ main :: () {
             add_neighbor_if_it_exists :: (tile: *Tile, neighbor_list: *[..] *Tile, dx: float32, dy: float32) {
                 neighbor_pos := Vector2.{ tile.pos.x + dx, tile.pos.y + dy };
                 neighbor_exists, neighbor := table_find_new(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
-                print("% looking at %, found %\n", tile.id, neighbor_pos, ifx neighbor_exists then neighbor.id else 0);
                 if neighbor_exists array_add(neighbor_list, neighbor);
             }
  
@@ -281,6 +283,24 @@ main :: () {
             print("%: [", tile_id);
             for n: neighbors.* print("%, ", n.id);
             print("]\n");
+        }
+
+        // Initialize edge list
+        {
+            for global_tile_id_to_neighbors {
+                tile_id, neighbors := it_index, it;
+                for neighbor: neighbors.* {
+                    distance := 1.0;
+
+                    // Cardinal neighbors are actually farther away than diagonal neighbors
+                    if neighbor.id == tile_id - 1  distance = 1.414; // north
+                    if neighbor.id == tile_id + 1  distance = 1.414; // south
+                    if neighbor.id == tile_id + 2 * MAP_ROW_COUNT distance = 1.414; // east
+                    if neighbor.id == tile_id - 2 * MAP_ROW_COUNT distance = 1.414; // west
+
+                    array_add(*edges, Edge.{ from = tile_id, to = neighbor.id, distance = distance });
+                }
+            }
         }
     }
 
@@ -376,6 +396,17 @@ main :: () {
 
             // Update active entity
             game_state.active_entity.sprite_rect.y -= xx sin(time * 3.0) / 10.0;
+
+            // Update target tile
+            found_target_tile := false;
+            for tile: tiles {
+                if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
+                    target_tile = tile;
+                    found_target_tile = true;
+                }
+            }
+            if !found_target_tile target_tile = null;
+            if target_tile != null print_vars(target_tile.id);
         }
 
         //
@@ -394,6 +425,12 @@ main :: () {
 
                 // Draw tiles
                 {
+                    tile_path : [] s32;
+                    if target_tile != null {
+                        tile_path = dijkstra(game_state.active_entity.on_tile_id, target_tile.id, edges);
+                    }
+                    print_vars(tile_path);
+
                     hovered_tile : *Tile;
                     for tile: tiles {
                         tint: Color;
@@ -401,6 +438,9 @@ main :: () {
                             case .DEFAULT; tint = LIGHTGRAY;
                             case .ACTIVE;  tint = GOLD;
                         }
+
+                        tile_is_in_path, _ := array_find(tile_path, tile.id);
+                        if tile_is_in_path tint = LIME;
 
                         if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
                             hovered_tile = tile;
