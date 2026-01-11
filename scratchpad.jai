@@ -17,5 +17,5 @@ main :: () {
       Edge.{1, 2, 17.38},
     ];
 
-    dijkstra(1, 2, edges);
+    dijkstra(0, 2, edges);
 }

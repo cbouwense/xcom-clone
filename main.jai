@@ -188,16 +188,6 @@ cleaners : [..] *Entity;
 main :: () {
     random_seed(123456789);
 
-    // Initialize globals
-    {
-        // TODO: why did I seemingly not need this?...
-        init(*global_tile_pos_to_tile);
-        defer deinit(*global_tile_pos_to_tile);
-
-        init(*global_tile_id_to_tile);
-        defer deinit(*global_tile_id_to_tile);
-    }
-
     InitWindow(1600, 900, "XCOM Clone");
     defer CloseWindow();
 
