@@ -83,6 +83,7 @@ move_camera_down  : bool;
 move_camera_left  : bool;
 move_camera_right : bool;
 go_to_next_phase  : bool;
+execute_action_on_tile       : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -151,8 +152,6 @@ Entity :: struct {
 
     health_max     : float32;
     health_curr    : float32;
-
-    on_tile_id : s32; // TODO: idk about this
 }
 
 TileState :: enum {
@@ -206,15 +205,17 @@ main :: () {
     // Initialize controls
     controls: Controls;
     {
-        controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
-        controls.move_camera_up[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W     };
-        controls.move_camera_down[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN  };
-        controls.move_camera_down[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S     };
-        controls.move_camera_left[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT  };
-        controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
-        // controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
-        controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
-        controls.go_to_next_phase[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT  };
+        controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP             };
+        controls.move_camera_up[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W              };
+        controls.move_camera_down[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN           };
+        controls.move_camera_down[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S              };
+        controls.move_camera_left[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT           };
+        controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A              };
+        controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT          };
+        controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D              };
+        controls.go_to_next_phase[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_N              };
+        controls.execute_action_on_tile[0]       = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT  };
+        controls.execute_action_on_tile[1]       = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
     }
 
     // Initialize tiles
@@ -252,19 +253,14 @@ main :: () {
             }
         }
 
-        // for global_tile_id_to_tile {
-        //     tile_id, tile := it_index, it;
-        //     print("%: %\n", tile_id, tile.pos);
-        // }
-
         // Initialize tile neighbor table
         for tile: tiles {
-            neighbor_list_exists, neighbor_list := table_find_new(*global_tile_id_to_neighbors, tile.id);
+            neighbor_list_exists, neighbor_list := table_find(*global_tile_id_to_neighbors, tile.id);
             assert(neighbor_list_exists, "Could not find neighbor list for tile id %\n", tile.id);
 
             add_neighbor_if_it_exists :: (tile: *Tile, neighbor_list: *[..] *Tile, dx: float32, dy: float32) {
                 neighbor_pos := Vector2.{ tile.pos.x + dx, tile.pos.y + dy };
-                neighbor_exists, neighbor := table_find_new(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
+                neighbor_exists, neighbor := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
                 if neighbor_exists array_add(neighbor_list, neighbor);
             }
  
@@ -276,13 +272,6 @@ main :: () {
             add_neighbor_if_it_exists(tile, neighbor_list, -TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50); // north west
             add_neighbor_if_it_exists(tile, neighbor_list, +TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50); // south east
             add_neighbor_if_it_exists(tile, neighbor_list, -TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50); // south west
-        }
-
-        for global_tile_id_to_neighbors {
-            tile_id, neighbors := it_index, it;
-            print("%: [", tile_id);
-            for n: neighbors.* print("%, ", n.id);
-            print("]\n");
         }
 
         // Initialize edge list
@@ -359,6 +348,7 @@ main :: () {
             move_camera_left  = control_is_down(controls.move_camera_left);
             move_camera_right = control_is_down(controls.move_camera_right);
             go_to_next_phase  = control_is_pressed(controls.go_to_next_phase);
+            execute_action_on_tile       = control_is_pressed(controls.execute_action_on_tile);
 
             camera.zoom += mouse_wheel_move * CAMERA_ZOOM_SPEED;
         }
@@ -377,8 +367,20 @@ main :: () {
                 camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
             }
 
+            // Update target tile
+            hovering_over_tile := false;
+            for tile: tiles {
+                if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
+                    target_tile = tile;
+                    hovering_over_tile = true;
+                }
+            }
+            if !hovering_over_tile { target_tile = null; }
+
             if go_to_next_phase {
-                tiles[game_state.active_entity.on_tile_id].tile_state = .DEFAULT;
+                tile := get_tile_by_pos(game_state.active_entity.pos);
+
+                tile.tile_state = .DEFAULT;
 
                 if #complete game_state.phase == {
                     case .CLEANERS;
@@ -388,25 +390,20 @@ main :: () {
                         game_state.phase = .CLEANERS;
                         game_state.active_entity = cleaners[0];
                 }
-                
+            } else if execute_action_on_tile {
+                if hovering_over_tile {
+                    move_entity_instantaneously(game_state.active_entity, target_tile.id);
+                }
             }
 
             // Update active tile
-            tiles[game_state.active_entity.on_tile_id].tile_state = .ACTIVE;
+            print_vars(game_state.active_entity.pos);
+            table_print(global_tile_pos_to_tile);
+            tile_that_should_be_active := get_tile_by_pos(game_state.active_entity.pos);
+            tile_that_should_be_active.tile_state = .ACTIVE;
 
             // Update active entity
             game_state.active_entity.sprite_rect.y -= xx sin(time * 3.0) / 10.0;
-
-            // Update target tile
-            found_target_tile := false;
-            for tile: tiles {
-                if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
-                    target_tile = tile;
-                    found_target_tile = true;
-                }
-            }
-            if !found_target_tile target_tile = null;
-            if target_tile != null print_vars(target_tile.id);
         }
 
         //
@@ -427,9 +424,9 @@ main :: () {
                 {
                     tile_path : [] s32;
                     if target_tile != null {
-                        tile_path = dijkstra(game_state.active_entity.on_tile_id, target_tile.id, edges);
+                        tile := get_tile_by_pos(game_state.active_entity.pos);
+                        tile_path = dijkstra(tile.id, target_tile.id, edges);
                     }
-                    print_vars(tile_path);
 
                     hovered_tile : *Tile;
                     for tile: tiles {
@@ -499,6 +496,13 @@ get_tile_pos_by_id :: (id: s32) -> Vector2 {
         tiles[id].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
         tiles[id].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
     };
+}
+
+get_tile_by_pos :: (pos: Vector2) -> *Tile {
+    print(vector2_to_string_temp(pos));
+    tile_exists, tile := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(pos));
+    assert(tile_exists);
+    return tile;
 }
 
 get_colliding_by_rect :: (subject_rect: Rectangle, collidables: [] $T/interface *Entity) -> *Entity {
@@ -582,7 +586,6 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
     // entity.texture_map_source_pos is set conditionally below
     entity.health_max             = 100.0;
     entity.health_curr            = 100.0;
-    entity.on_tile_id             = on_tile_id;
 
     if #complete entity_type == {
         case .DIRTY_PLATE;
@@ -597,7 +600,16 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
     return entity;
 }
 
+move_entity_instantaneously :: (entity: *Entity, tile_id: s32) {
+    pos := get_tile_pos_by_id(tile_id);
+
+    entity.pos           = pos;
+    entity.bounding_rect = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+    entity.sprite_rect   = get_default_sprite_rect(tile_id);
+}
+
 get_default_sprite_rect :: (on_tile_id: s32) -> Rectangle {
     pos := get_tile_pos_by_id(on_tile_id);
     return Rectangle.{ pos.x, pos.y - TILEMAP_DISHES_WORLD_HEIGHT * 0.25, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
 }
+

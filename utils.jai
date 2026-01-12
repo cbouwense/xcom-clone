@@ -1,6 +1,7 @@
 #import "Basic";
 #import "Hash_Table";
 #import "Math";
+String :: #import "String";
 
 read_then_increment :: (x: *s32, increment: s32 = 1) -> s32 {
     defer x.* += increment;
@@ -62,7 +63,7 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
         for nodes {
             node_id := it_index;
 
-            node_distance_exists, node_distance := table_find_new(*ids_to_distances, node_id);
+            node_distance_exists, node_distance := table_find(*ids_to_distances, node_id);
             assert(node_distance_exists);
 
             if node_distance < closest_node_distance {
@@ -87,11 +88,11 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
 
             if node_id != current_node_id continue;
 
-            neighbor_already_visited, _ := table_find_new(*visited_nodes_set, neighbor_id);
+            neighbor_already_visited, _ := table_find(*visited_nodes_set, neighbor_id);
             if neighbor_already_visited continue;
 
-            current_node_distance_exists, current_node_distance         := table_find_new(*ids_to_distances, node_id);
-            current_neighbor_distance_exists, current_neighbor_distance := table_find_new(*ids_to_distances, neighbor_id);
+            current_node_distance_exists, current_node_distance         := table_find(*ids_to_distances, node_id);
+            current_neighbor_distance_exists, current_neighbor_distance := table_find(*ids_to_distances, neighbor_id);
 
             // Pretty sure these should always exist. Although, if you're running into this and realize that they can,
             // don't be afraid to change these asserts.
@@ -118,7 +119,7 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
 
     while true {
         array_add(*reverse_path, current_node_id);
-        next_predecessor_found, next_predecessor := table_find_new(*predecessors, current_node_id);
+        next_predecessor_found, next_predecessor := table_find(*predecessors, current_node_id);
         if !next_predecessor_found break;
         current_node_id = next_predecessor;
     }
@@ -126,4 +127,19 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
     for 0..reverse_path.count-1 array_add(*final_path, reverse_path[reverse_path.count-1 - it]);
 
     return final_path;
+}
+
+table_print :: (table: Table, table_name: string = "") {
+    if String.equal(table_name, "") {
+        print("{\n");
+    } else {
+        print("%: {\n");
+    }
+
+    for table {
+        key, value := it_index, it;
+        print("[%]: %\n", key, value);
+    }
+
+    print("}\n");
 }

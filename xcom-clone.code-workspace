@@ -5,10 +5,6 @@
 			"path": "."
 		},
 		{
-			"name": "jai",
-			"path": "../../../../ThirdParty/jai"
-		},
-		{
 			"name": "raylib",
 			"path": "../../../../raylib/raylib"
 		},
@@ -18,6 +14,9 @@
 		},
 		{
 			"path": "../terraria-clone"
+		},
+		{
+			"path": "../../../../ThirdParty/jai"
 		}
 	],
 	"settings": {}

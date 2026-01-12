@@ -9,6 +9,7 @@ Controls :: struct {
     move_camera_left  : [3] Control;
     move_camera_right : [3] Control;
     go_to_next_phase  : [3] Control;
+    execute_action_on_tile       : [3] Control; // things like moving to a tile on the board
 }
 
 control_is_down :: (haystack: [] Control) -> bool {
