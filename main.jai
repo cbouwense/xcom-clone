@@ -392,6 +392,11 @@ main :: () {
                 }
             } else if execute_action_on_tile {
                 if hovering_over_tile {
+                    // Change tile before movement back to default
+                    tile_on_before_movement := get_tile_by_pos(game_state.active_entity.pos);
+                    tile_on_before_movement.tile_state = .DEFAULT;
+
+                    // Then, move the entity to the target tile
                     move_entity_instantaneously(game_state.active_entity, target_tile.id);
                 }
             }
