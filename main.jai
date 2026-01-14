@@ -397,8 +397,6 @@ main :: () {
             }
 
             // Update active tile
-            print_vars(game_state.active_entity.pos);
-            table_print(global_tile_pos_to_tile);
             tile_that_should_be_active := get_tile_by_pos(game_state.active_entity.pos);
             tile_that_should_be_active.tile_state = .ACTIVE;
 
@@ -492,14 +490,14 @@ main :: () {
 }
 
 get_tile_pos_by_id :: (id: s32) -> Vector2 {
-    return Vector2.{
-        tiles[id].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
-        tiles[id].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
-    };
+    return tiles[id].pos; // TODO: this will probably not work if/when tiles can be changed
+    // return Vector2.{
+    //     tiles[id].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
+    //     tiles[id].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
+    // };
 }
 
 get_tile_by_pos :: (pos: Vector2) -> *Tile {
-    print(vector2_to_string_temp(pos));
     tile_exists, tile := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(pos));
     assert(tile_exists);
     return tile;
@@ -610,6 +608,11 @@ move_entity_instantaneously :: (entity: *Entity, tile_id: s32) {
 
 get_default_sprite_rect :: (on_tile_id: s32) -> Rectangle {
     pos := get_tile_pos_by_id(on_tile_id);
-    return Rectangle.{ pos.x, pos.y - TILEMAP_DISHES_WORLD_HEIGHT * 0.25, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+    return Rectangle.{
+        pos.x - TILEMAP_DISHES_WORLD_WIDTH  * 0.50,
+        pos.y - TILEMAP_DISHES_WORLD_HEIGHT * 0.75,
+        TILEMAP_DISHES_WORLD_WIDTH,
+        TILEMAP_DISHES_WORLD_HEIGHT,
+    };
 }
 
