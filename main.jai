@@ -151,7 +151,10 @@ Entity :: struct {
     texture_map_source_pos : Vector2;
 
     health_max     : float32;
-    health_curr    : float32;
+    health_current : float32;
+
+    tile_moves_per_turn_max     : s32;
+    tile_moves_per_turn_current : s32;
 }
 
 TileState :: enum {
@@ -334,6 +337,12 @@ main :: () {
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
 
+        tile_path : [] s32;
+        if target_tile != null {
+            tile := get_tile_by_pos(game_state.active_entity.pos);
+            tile_path = dijkstra(tile.id, target_tile.id, edges);
+        }
+
         //
         // Input
         //
@@ -392,12 +401,18 @@ main :: () {
                 }
             } else if execute_action_on_tile {
                 if hovering_over_tile {
-                    // Change tile before movement back to default
-                    tile_on_before_movement := get_tile_by_pos(game_state.active_entity.pos);
-                    tile_on_before_movement.tile_state = .DEFAULT;
+                    // First, check if this tile is even within the active entity's range
+                    if tile_path.count <= game_state.active_entity.tile_moves_per_turn_current {
+                        // Change tile before movement back to default
+                        tile_on_before_movement := get_tile_by_pos(game_state.active_entity.pos);
+                        tile_on_before_movement.tile_state = .DEFAULT;
 
-                    // Then, move the entity to the target tile
-                    move_entity_instantaneously(game_state.active_entity, target_tile.id);
+                        // Then, move the entity to the target tile
+                        move_entity_instantaneously(game_state.active_entity, target_tile.id);
+
+                        // Remove the amount of tiles moved from the entity's current count
+                        game_state.active_entity.tile_moves_per_turn_current -= xx tile_path.count;
+                    }
                 }
             }
 
@@ -425,12 +440,6 @@ main :: () {
 
                 // Draw tiles
                 {
-                    tile_path : [] s32;
-                    if target_tile != null {
-                        tile := get_tile_by_pos(game_state.active_entity.pos);
-                        tile_path = dijkstra(tile.id, target_tile.id, edges);
-                    }
-
                     hovered_tile : *Tile;
                     for tile: tiles {
                         tint: Color;
@@ -439,7 +448,11 @@ main :: () {
                             case .ACTIVE;  tint = GOLD;
                         }
 
-                        tile_is_in_path, _ := array_find(tile_path, tile.id);
+                        // Limit the tiles drawn to the amount the 
+                        tile_path_view := tile_path;
+                        tile_path_view.count = min(tile_path.count, game_state.active_entity.tile_moves_per_turn_current);
+
+                        tile_is_in_path, _ := array_find(tile_path_view, tile.id);
                         if tile_is_in_path tint = LIME;
 
                         if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
@@ -588,7 +601,9 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
     entity.sprite_rect            = get_default_sprite_rect(on_tile_id);
     // entity.texture_map_source_pos is set conditionally below
     entity.health_max             = 100.0;
-    entity.health_curr            = 100.0;
+    entity.health_current         = 100.0;
+    entity.tile_moves_per_turn_max     = 5;
+    entity.tile_moves_per_turn_current = 5;
 
     if #complete entity_type == {
         case .DIRTY_PLATE;
