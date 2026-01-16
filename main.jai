@@ -83,7 +83,8 @@ move_camera_down  : bool;
 move_camera_left  : bool;
 move_camera_right : bool;
 go_to_next_phase  : bool;
-execute_action_on_tile       : bool;
+select_entity_on_tile  : bool;
+execute_action_on_tile : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -217,8 +218,8 @@ main :: () {
         controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT          };
         controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D              };
         controls.go_to_next_phase[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_N              };
-        controls.execute_action_on_tile[0]       = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT  };
-        controls.execute_action_on_tile[1]       = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
+        controls.select_entity_on_tile[0]  = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT  };
+        controls.execute_action_on_tile[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
     }
 
     // Initialize tiles
@@ -357,7 +358,8 @@ main :: () {
             move_camera_left  = control_is_down(controls.move_camera_left);
             move_camera_right = control_is_down(controls.move_camera_right);
             go_to_next_phase  = control_is_pressed(controls.go_to_next_phase);
-            execute_action_on_tile       = control_is_pressed(controls.execute_action_on_tile);
+            select_entity_on_tile  = control_is_pressed(controls.select_entity_on_tile);
+            execute_action_on_tile = control_is_pressed(controls.execute_action_on_tile);
 
             camera.zoom += mouse_wheel_move * CAMERA_ZOOM_SPEED;
         }
@@ -399,7 +401,18 @@ main :: () {
                         game_state.phase = .CLEANERS;
                         game_state.active_entity = cleaners[0];
                 }
-            } else if execute_action_on_tile {
+            }
+            else if select_entity_on_tile {
+                if hovering_over_tile {
+                    if game_state.phase == .CLEANERS {
+                        found, new_active_cleaner := get_entity_on_tile_by_pos(target_tile.pos, cleaners);
+                        if found {
+                            game_state.active_entity = new_active_cleaner;
+                        }
+                    }
+                }
+            } 
+            else if execute_action_on_tile {
                 if hovering_over_tile {
                     // First, check if this tile is even within the active entity's range
                     if tile_path.count <= game_state.active_entity.tile_moves_per_turn_current {
@@ -416,9 +429,15 @@ main :: () {
                 }
             }
 
-            // Update active tile
-            tile_that_should_be_active := get_tile_by_pos(game_state.active_entity.pos);
-            tile_that_should_be_active.tile_state = .ACTIVE;
+            // Update tiles
+            {
+                for tile: tiles {
+                    tile.tile_state = .DEFAULT;
+                }
+
+                tile_that_should_be_active := get_tile_by_pos(game_state.active_entity.pos);
+                tile_that_should_be_active.tile_state = .ACTIVE;
+            }
 
             // Update active entity
             game_state.active_entity.sprite_rect.y -= xx sin(time * 3.0) / 10.0;
@@ -440,7 +459,6 @@ main :: () {
 
                 // Draw tiles
                 {
-                    hovered_tile : *Tile;
                     for tile: tiles {
                         tint: Color;
                         if #complete tile.tile_state == {
@@ -448,16 +466,12 @@ main :: () {
                             case .ACTIVE;  tint = GOLD;
                         }
 
-                        // Limit the tiles drawn to the amount the 
+                        // Limit the tiles drawn to the amount the entity can move
                         tile_path_view := tile_path;
                         tile_path_view.count = min(tile_path.count, game_state.active_entity.tile_moves_per_turn_current);
 
                         tile_is_in_path, _ := array_find(tile_path_view, tile.id);
                         if tile_is_in_path tint = LIME;
-
-                        if CheckCollisionPointPoly(mouse_pos_in_world, *tile.bounding_points[0], 4) {
-                            hovered_tile = tile;
-                        }
 
                         DrawTexturePro(
                             tilemap_texture_general,
@@ -471,8 +485,8 @@ main :: () {
                         if debug_mode {
                              DrawText(
                                 tprint("%\0", tile.id).data,
-                                xx (tile.pos.x),// + TILE_WORLD_WIDTH  * 0.50),
-                                xx (tile.pos.y),// + TILE_WORLD_HEIGHT * 0.50),
+                                xx (tile.pos.x),
+                                xx (tile.pos.y),
                                 12,
                                 WHITE,
                             );
@@ -480,11 +494,11 @@ main :: () {
                     }
 
                     // Redraw hovered tile so it is drawn above all other tiles.
-                    if hovered_tile != null {
+                    if target_tile != null {
                         DrawTexturePro(
                             tilemap_texture_general,
                             Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
-                            hovered_tile.sprite_rect,
+                            target_tile.sprite_rect,
                             Vector2.{ 0, 0 },
                             0.0,
                             GRAY,
@@ -509,16 +523,31 @@ main :: () {
 
 get_tile_pos_by_id :: (id: s32) -> Vector2 {
     return tiles[id].pos; // TODO: this will probably not work if/when tiles can be changed
-    // return Vector2.{
-    //     tiles[id].pos.x - TILEMAP_GENERAL_TILE_WIDTH  * 0.50,
-    //     tiles[id].pos.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.50,
-    // };
 }
 
 get_tile_by_pos :: (pos: Vector2) -> *Tile {
     tile_exists, tile := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(pos));
     assert(tile_exists);
     return tile;
+}
+
+get_entity_on_tile_by_pos :: (tile_pos: Vector2, entities: []*Entity) -> (found: bool, entity: *Entity) {
+    for entities {
+        print_vars(it);
+        if it.pos.x == tile_pos.x && it.pos.y == tile_pos.y {
+            return true, it;
+        }
+    }
+
+    return false, null;
+}
+
+get_entity_on_tile_by_tile_id :: (tile_id: s32, entities: []*Entity) -> (found: bool, entity: *Entity) {
+    tile_pos := get_tile_pos_by_id(tile_id);
+    print_vars(tile_pos);
+
+    found, entity := get_entity_on_tile_by_pos(tile_pos, entities);
+    return found, entity;
 }
 
 get_colliding_by_rect :: (subject_rect: Rectangle, collidables: [] $T/interface *Entity) -> *Entity {
