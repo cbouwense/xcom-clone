@@ -529,29 +529,21 @@ main :: () {
 
             // Draw UI
             {
+                stat_windows_drawn : s32 = 0;
+
+                // Draw stats for active_entity
+                if game_state.active_entity != null {
+                    draw_entity_stats(game_state.active_entity, *stat_windows_drawn);
+                }
+
                 if target_tile != null {
                     did_find_cleaner, cleaner := find_entity_on_tile_by_pos(target_tile.pos, cleaners);
                     did_find_dish, dish := find_entity_on_tile_by_pos(target_tile.pos, dishes);
 
-                    // TODO: both?
+                    entity := ifx did_find_cleaner then cleaner else ifx did_find_dish then dish else null;
 
-                    if did_find_cleaner {
-                        font_size : s32 = 20;
-                        health_text := tprint("Health: % / %\0", cleaner.health_current, cleaner.health_max).data;
-                        moves_text  := tprint("Moves: % / %\0", cleaner.tile_moves_per_turn_current, cleaner.tile_moves_per_turn_max).data;
-
-                        health_text_length := MeasureText(health_text, font_size);
-                        moves_text_length  := MeasureText(moves_text,  font_size);
-
-                        longest_text_length := max(health_text_length, moves_text_length);
-
-                        DrawRectangleRounded(Rectangle.{ 20, 20, longest_text_length + 20.0, 200 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
-
-                        // Draw health
-                        DrawText(health_text, 30, 30, font_size, WHITE);
-
-                        // Draw moves
-                        DrawText(moves_text, 30, 50, font_size, WHITE);
+                    if (did_find_cleaner || did_find_dish) && entity.id != game_state.active_entity.id {
+                        draw_entity_stats(entity, *stat_windows_drawn);
                     }
                 }
             }
@@ -562,6 +554,30 @@ main :: () {
             }
         }
     }
+}
+
+draw_entity_stats :: (entity: Entity, stat_windows_drawn: *s32) {
+    font_size : s32 = 20;
+    health_text := tprint("Health: % / %\0", entity.health_current, entity.health_max).data;
+    moves_text  := tprint("Moves: % / %\0", entity.tile_moves_per_turn_current, entity.tile_moves_per_turn_max).data;
+
+    health_text_length := MeasureText(health_text, font_size);
+    moves_text_length  := MeasureText(moves_text,  font_size);
+
+    longest_text_length := max(health_text_length, moves_text_length);
+
+    margin_top := ifx stat_windows_drawn.* > 0 then 20 else 0;
+    y_offset   := stat_windows_drawn.* * 100 + margin_top;
+
+    DrawRectangleRounded(Rectangle.{ 20, xx (20 + y_offset), longest_text_length + 20.0, 100 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
+
+    // Draw health
+    DrawText(health_text, 30, xx (30 + y_offset), font_size, WHITE);
+
+    // Draw moves
+    DrawText(moves_text, 30, xx (50 + y_offset), font_size, WHITE);
+
+    stat_windows_drawn.* += 1;
 }
 
 is_entity_on_tile :: (entity: Entity, tile: Tile) -> bool {
