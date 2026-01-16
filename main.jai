@@ -300,18 +300,18 @@ main :: () {
     // Initialize dishes
     {
         tile_id_to_spawn_on : s32 = 0;
-        for 0..MAP_COL_COUNT-1 {
+        while tile_id_to_spawn_on < MAP_ROW_COUNT*MAP_COL_COUNT-1 {
             create_entity(.DIRTY_PLATE, tile_id_to_spawn_on);
-            tile_id_to_spawn_on += MAP_COL_COUNT;
+            tile_id_to_spawn_on += MAP_COL_COUNT * 2;
         }
     }
 
     // Initialize cleaners
     {
         tile_id_to_spawn_on : s32 = MAP_ROW_COUNT-1;
-        for 0..MAP_COL_COUNT-1 {
+        while tile_id_to_spawn_on < MAP_ROW_COUNT*MAP_COL_COUNT-1 {
             create_entity(.SPONGE, tile_id_to_spawn_on);
-            tile_id_to_spawn_on += MAP_COL_COUNT;
+            tile_id_to_spawn_on += MAP_COL_COUNT * 2;
         }
     }
 
@@ -439,6 +439,14 @@ main :: () {
                 tile_that_should_be_active.tile_state = .ACTIVE;
             }
 
+            // Update cleaners
+            {
+                for cleaner: cleaners {
+                    if cleaner.id != game_state.active_entity.id {
+                        cleaner.sprite_rect = get_default_sprite_rect(get_tile_by_pos(cleaner.pos).id);
+                    }
+                }
+            }
             // Update active entity
             game_state.active_entity.sprite_rect.y -= xx sin(time * 3.0) / 10.0;
         }
