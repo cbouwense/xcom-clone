@@ -530,19 +530,28 @@ main :: () {
             // Draw UI
             {
                 if target_tile != null {
-                    did_find_cleaner, found_cleaner := find_entity_on_tile_by_pos(target_tile.pos, cleaners);
-                    did_find_dish, found_dish := find_entity_on_tile_by_pos(target_tile.pos, dishes);
+                    did_find_cleaner, cleaner := find_entity_on_tile_by_pos(target_tile.pos, cleaners);
+                    did_find_dish, dish := find_entity_on_tile_by_pos(target_tile.pos, dishes);
 
-                    if did_find_cleaner && did_find_dish {
-                        DrawRectangleRounded(Rectangle.{ 20, 20, 200, 200 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
-                    }
+                    // TODO: both?
 
-                    if did_find_cleaner && !did_find_dish {
-                        DrawRectangleRounded(Rectangle.{ 20, 20, 200, 200 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
-                    }
+                    if did_find_cleaner {
+                        font_size : s32 = 20;
+                        health_text := tprint("Health: % / %\0", cleaner.health_current, cleaner.health_max).data;
+                        moves_text  := tprint("Moves: % / %\0", cleaner.tile_moves_per_turn_current, cleaner.tile_moves_per_turn_max).data;
 
-                    if !did_find_cleaner && did_find_dish {
-                        DrawRectangleRounded(Rectangle.{ 20, 20, 200, 200 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
+                        health_text_length := MeasureText(health_text, font_size);
+                        moves_text_length  := MeasureText(moves_text,  font_size);
+
+                        longest_text_length := max(health_text_length, moves_text_length);
+
+                        DrawRectangleRounded(Rectangle.{ 20, 20, longest_text_length + 20.0, 200 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
+
+                        // Draw health
+                        DrawText(health_text, 30, 30, font_size, WHITE);
+
+                        // Draw moves
+                        DrawText(moves_text, 30, 50, font_size, WHITE);
                     }
                 }
             }
@@ -571,7 +580,6 @@ get_tile_by_pos :: (pos: Vector2) -> *Tile {
 
 find_entity_on_tile_by_pos :: (tile_pos: Vector2, entities: []*Entity) -> (found: bool, entity: *Entity) {
     for entities {
-        print_vars(it);
         if it.pos.x == tile_pos.x && it.pos.y == tile_pos.y {
             return true, it;
         }
@@ -582,7 +590,6 @@ find_entity_on_tile_by_pos :: (tile_pos: Vector2, entities: []*Entity) -> (found
 
 get_entity_on_tile_by_tile_id :: (tile_id: s32, entities: []*Entity) -> (found: bool, entity: *Entity) {
     tile_pos := get_tile_pos_by_id(tile_id);
-    print_vars(tile_pos);
 
     found, entity := find_entity_on_tile_by_pos(tile_pos, entities);
     return found, entity;
