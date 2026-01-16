@@ -405,7 +405,7 @@ main :: () {
             else if select_entity_on_tile {
                 if hovering_over_tile {
                     if game_state.phase == .CLEANERS {
-                        found, new_active_cleaner := get_entity_on_tile_by_pos(target_tile.pos, cleaners);
+                        found, new_active_cleaner := find_entity_on_tile_by_pos(target_tile.pos, cleaners);
                         if found {
                             game_state.active_entity = new_active_cleaner;
                         }
@@ -447,6 +447,7 @@ main :: () {
                     }
                 }
             }
+
             // Update active entity
             game_state.active_entity.sprite_rect.y -= xx sin(time * 3.0) / 10.0;
         }
@@ -469,17 +470,20 @@ main :: () {
                 {
                     for tile: tiles {
                         tint: Color;
-                        if #complete tile.tile_state == {
-                            case .DEFAULT; tint = LIGHTGRAY;
-                            case .ACTIVE;  tint = GOLD;
+                        // Determine tile tint
+                        {
+                            if #complete tile.tile_state == {
+                                case .DEFAULT; tint = LIGHTGRAY;
+                                case .ACTIVE;  tint = GOLD;
+                            }
+
+                            // Limit the tiles drawn to the amount the entity can move
+                            tile_path_view := tile_path;
+                            tile_path_view.count = min(tile_path.count, game_state.active_entity.tile_moves_per_turn_current);
+
+                            tile_is_in_path, _ := array_find(tile_path_view, tile.id);
+                            if tile_is_in_path tint = LIME;
                         }
-
-                        // Limit the tiles drawn to the amount the entity can move
-                        tile_path_view := tile_path;
-                        tile_path_view.count = min(tile_path.count, game_state.active_entity.tile_moves_per_turn_current);
-
-                        tile_is_in_path, _ := array_find(tile_path_view, tile.id);
-                        if tile_is_in_path tint = LIME;
 
                         DrawTexturePro(
                             tilemap_texture_general,
@@ -490,15 +494,17 @@ main :: () {
                             tint,
                         );
 
-                        if debug_mode {
-                             DrawText(
-                                tprint("%\0", tile.id).data,
-                                xx (tile.pos.x),
-                                xx (tile.pos.y),
-                                12,
-                                WHITE,
-                            );
-                        }
+                        
+
+                        // if debug_mode {
+                        //      DrawText(
+                        //         tprint("%\0", tile.id).data,
+                        //         xx (tile.pos.x),
+                        //         xx (tile.pos.y),
+                        //         12,
+                        //         WHITE,
+                        //     );
+                        // }
                     }
 
                     // Redraw hovered tile so it is drawn above all other tiles.
@@ -521,12 +527,36 @@ main :: () {
                 for cleaner: cleaners draw_entity(cleaner);
             }
 
+            // Draw UI
+            {
+                if target_tile != null {
+                    did_find_cleaner, found_cleaner := find_entity_on_tile_by_pos(target_tile.pos, cleaners);
+                    did_find_dish, found_dish := find_entity_on_tile_by_pos(target_tile.pos, dishes);
+
+                    if did_find_cleaner && did_find_dish {
+                        DrawRectangleRounded(Rectangle.{ 20, 20, 200, 200 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
+                    }
+
+                    if did_find_cleaner && !did_find_dish {
+                        DrawRectangleRounded(Rectangle.{ 20, 20, 200, 200 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
+                    }
+
+                    if !did_find_cleaner && did_find_dish {
+                        DrawRectangleRounded(Rectangle.{ 20, 20, 200, 200 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
+                    }
+                }
+            }
+
             // Draw debug
             if debug_mode {
                 DrawFPS(10, 10);
             }
         }
     }
+}
+
+is_entity_on_tile :: (entity: Entity, tile: Tile) -> bool {
+    return entity.pos.x == tile.pos.x && entity.pos.y == tile.pos.y;
 }
 
 get_tile_pos_by_id :: (id: s32) -> Vector2 {
@@ -539,7 +569,7 @@ get_tile_by_pos :: (pos: Vector2) -> *Tile {
     return tile;
 }
 
-get_entity_on_tile_by_pos :: (tile_pos: Vector2, entities: []*Entity) -> (found: bool, entity: *Entity) {
+find_entity_on_tile_by_pos :: (tile_pos: Vector2, entities: []*Entity) -> (found: bool, entity: *Entity) {
     for entities {
         print_vars(it);
         if it.pos.x == tile_pos.x && it.pos.y == tile_pos.y {
@@ -554,7 +584,7 @@ get_entity_on_tile_by_tile_id :: (tile_id: s32, entities: []*Entity) -> (found: 
     tile_pos := get_tile_pos_by_id(tile_id);
     print_vars(tile_pos);
 
-    found, entity := get_entity_on_tile_by_pos(tile_pos, entities);
+    found, entity := find_entity_on_tile_by_pos(tile_pos, entities);
     return found, entity;
 }
 
