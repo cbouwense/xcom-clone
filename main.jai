@@ -328,6 +328,10 @@ main :: () {
         active_entity = cleaners[0],
     };
 
+    // TODO: probably don't leave this here
+    tile_id_to_move_count_remaining : Table(s32, s32);
+    tile_id_to_move_count_remaining.allocator = temp;
+
     while !WindowShouldClose() {
         defer reset_temporary_storage();
 
@@ -338,12 +342,36 @@ main :: () {
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
 
-        tile_path : [] s32;
-        if target_tile != null && game_state.active_entity != null {
-            tile := get_tile_by_pos(game_state.active_entity.pos);
-            tile_path = dijkstra(tile.id, target_tile.id, edges);
-            // The first element is going to be the starting tile, which we don't want in the path.
-            array_ordered_remove_by_index(*tile_path, 0);
+        if game_state.active_entity != null {
+            // Check if there is a neighboring tile to the North. If there is, check if it can be inhabited. If so,
+            // mark it down as part of the valid tile ids, and also mark down in a table the moves that would
+            // be available if moved to that tile.
+            check_if_neighbor_exists :: (tile: *Tile, dx: float32, dy: float32) -> neighbor_exists: bool, neighbor: *Tile {
+                neighbor_pos := Vector2.{ tile.pos.x + dx, tile.pos.y + dy };
+                neighbor_exists, neighbor := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
+                return neighbor_exists, neighbor;
+            }
+ 
+            TILE_DIRECTION_DELTAS :: [2]float32.[
+                .[0.0, -TILE_WORLD_HEIGHT],  // north
+                .[0.0, +TILE_WORLD_HEIGHT],  // south
+                .[+TILE_WORLD_WIDTH, 0.0],   // east
+                .[-TILE_WORLD_WIDTH, 0.0],   // west
+                .[+TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50], // north east
+                .[-TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50], // north west
+                .[+TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50], // south east
+                .[-TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50], // south west
+            ];
+
+            starting_tile := get_tile_by_pos(game_state.active_entity.pos);
+            moves_remaining := game_state.active_entity.tile_moves_per_turn_current - 1;
+
+            for TILE_DIRECTION_DELTAS {
+                neighbor_exists, neighbor := check_if_neighbor_exists(starting_tile, it[0], it[1]);
+                if neighbor_exists { table_set(*tile_id_to_move_count_remaining, neighbor.id, moves_remaining); }
+            }
+
+            table_print(tile_id_to_move_count_remaining);
         }
 
         //
@@ -451,17 +479,17 @@ main :: () {
                 if hovering_over_tile {
                     if game_state.active_entity != null {
                         // First, check if this tile is even within the active entity's range
-                        if tile_path.count <= game_state.active_entity.tile_moves_per_turn_current {
-                            // Change tile before movement back to default
-                            tile_on_before_movement := get_tile_by_pos(game_state.active_entity.pos);
-                            tile_on_before_movement.tile_state = .DEFAULT;
+                        // if tile_path.count <= game_state.active_entity.tile_moves_per_turn_current {
+                        //     // Change tile before movement back to default
+                        //     tile_on_before_movement := get_tile_by_pos(game_state.active_entity.pos);
+                        //     tile_on_before_movement.tile_state = .DEFAULT;
 
-                            // Then, move the entity to the target tile
-                            move_entity_instantaneously(game_state.active_entity, target_tile.id);
+                        //     // Then, move the entity to the target tile
+                        //     move_entity_instantaneously(game_state.active_entity, target_tile.id);
 
-                            // Remove the amount of tiles moved from the entity's current count
-                            game_state.active_entity.tile_moves_per_turn_current -= xx tile_path.count;
-                        }
+                        //     // Remove the amount of tiles moved from the entity's current count
+                        //     game_state.active_entity.tile_moves_per_turn_current -= xx tile_path.count;
+                        // }
                     }
                 }
             }
@@ -519,20 +547,20 @@ main :: () {
                                 case .ACTIVE;  tint = GOLD;
                             }
 
-                            // Limit the tiles drawn to the amount the entity can move
-                            tile_path_view := tile_path;
-                            tile_path_view.count = ifx game_state.active_entity == null
-                                then tile_path.count
-                                else min(tile_path.count, game_state.active_entity.tile_moves_per_turn_current);
+                            // // Limit the tiles drawn to the amount the entity can move
+                            // tile_path_view := tile_path;
+                            // tile_path_view.count = ifx game_state.active_entity == null
+                            //     then tile_path.count
+                            //     else min(tile_path.count, game_state.active_entity.tile_moves_per_turn_current);
 
-                            tile_is_in_path, _ := array_find(tile_path_view, tile.id);
-                            if tile_is_in_path {
-                                tint = LIME;
-                            }
-                            else if target_tile != null && tile.id == target_tile.id {
-                                tint = RED;
-                                target_tile_tint = tint;
-                            }
+                            // tile_is_in_path, _ := array_find(tile_path_view, tile.id);
+                            // if tile_is_in_path {
+                            //     tint = LIME;
+                            // }
+                            // else if target_tile != null && tile.id == target_tile.id {
+                            //     tint = RED;
+                            //     target_tile_tint = tint;
+                            // }
                         }
 
                         DrawTexturePro(
@@ -544,15 +572,15 @@ main :: () {
                             tint,
                         );
 
-                        // if debug_mode {
-                        //      DrawText(
-                        //         tprint("%\0", tile.id).data,
-                        //         xx (tile.pos.x),
-                        //         xx (tile.pos.y),
-                        //         12,
-                        //         WHITE,
-                        //     );
-                        // }
+                        if debug_mode {
+                             DrawText(
+                                tprint("%\0", tile.id).data,
+                                xx (tile.pos.x),
+                                xx (tile.pos.y),
+                                12,
+                                WHITE,
+                            );
+                        }
                     }
 
                     // Redraw hovered tile so it is drawn above all other tiles.
