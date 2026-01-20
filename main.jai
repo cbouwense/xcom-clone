@@ -365,8 +365,6 @@ main :: () {
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
 
-        print_vars(game_state);
-
         // Populate moveable boundary for active entity
         if game_state.active_entity != null {
             // Check if there is a neighboring tile to the North. If there is, check if it can be inhabited. If so,
@@ -393,8 +391,8 @@ main :: () {
             }
 
             populate_moveable_tiles :: (tile: *Tile, moves_remaining: s32, tile_id_to_move_count_remaining: *Table) {
-                print("before\n");
-                table_print(tile_id_to_move_count_remaining);
+                if moves_remaining < 0 return;
+
                 for TILE_DIRECTION_DELTAS {
                     neighbor_valid, neighbor := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
 
@@ -406,17 +404,14 @@ main :: () {
                         }
                     }
                 }
-                print("after\n");
-                table_print(tile_id_to_move_count_remaining);
 
                 moves_remaining -= 1;
-                if moves_remaining >= 0 {
-                    for TILE_DIRECTION_DELTAS {
-                        found_next_tile, next_tile := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
-                        if !found_next_tile continue;
+                
+                for TILE_DIRECTION_DELTAS {
+                    found_next_tile, next_tile := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
+                    if !found_next_tile continue;
 
-                        populate_moveable_tiles(next_tile, moves_remaining, tile_id_to_move_count_remaining);
-                    }
+                    populate_moveable_tiles(next_tile, moves_remaining, tile_id_to_move_count_remaining);
                 }
             }
 
@@ -529,18 +524,22 @@ main :: () {
             else if execute_action_on_tile {
                 if hovering_over_tile {
                     if game_state.active_entity != null {
-                        // First, check if this tile is even within the active entity's range
-                        // if tile_path.count <= game_state.active_entity.tile_moves_per_turn_current {
-                        //     // Change tile before movement back to default
-                        //     tile_on_before_movement := get_tile_by_pos(game_state.active_entity.pos);
-                        //     tile_on_before_movement.tile_state = .DEFAULT;
+                        tile := get_tile_by_pos(game_state.active_entity.pos);
+                        has_entry, move_count_remaining := table_find(*tile_id_to_move_count_remaining, target_tile.id);
+                        table_print(tile_id_to_move_count_remaining);
+                        print_vars(tile.*, has_entry, move_count_remaining);
 
-                        //     // Then, move the entity to the target tile
-                        //     move_entity_instantaneously(game_state.active_entity, target_tile.id);
+                        // Check if this tile is even within the active entity's range
+                        if has_entry {
+                            // Change tile before movement back to default
+                            tile.tile_state = .DEFAULT;
 
-                        //     // Remove the amount of tiles moved from the entity's current count
-                        //     game_state.active_entity.tile_moves_per_turn_current -= xx tile_path.count;
-                        // }
+                            // Then, move the entity to the target tile
+                            move_entity_instantaneously(game_state.active_entity, target_tile.id);
+
+                            // Remove the amount of tiles moved from the entity's current count
+                            game_state.active_entity.tile_moves_per_turn_current = move_count_remaining;
+                        }
                     }
                 }
             }
