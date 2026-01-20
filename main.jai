@@ -92,8 +92,11 @@ execute_action_on_tile : bool;
 
 global_id_counter      : s32;
 global_tile_id_counter : s32;
+
 global_tile_pos_to_tile     : Table(string, *Tile);
 global_tile_id_to_tile      : Table(s32, *Tile);
+// TODO: maybe...
+// global_tile_id_to_entity    : Table(s32, *Entity);
 global_tile_id_to_neighbors : Table(s32, *[..] *Tile);
 
 BOUNDING_POINT_INDEX_NORTH :: 0;
@@ -132,6 +135,17 @@ Direction :: enum {
     CENTER; // essentially no direction
 }
 
+TILE_DIRECTION_DELTAS :: [2]float32.[
+    .[0.0, -TILE_WORLD_HEIGHT],  // north
+    .[0.0, +TILE_WORLD_HEIGHT],  // south
+    .[+TILE_WORLD_WIDTH, 0.0],   // east
+    .[-TILE_WORLD_WIDTH, 0.0],   // west
+    .[+TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50], // north east
+    .[-TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50], // north west
+    .[+TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50], // south east
+    .[-TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50], // south west
+];
+
 EntityType :: enum {
     DIRTY_PLATE;
     SPONGE;
@@ -158,6 +172,11 @@ Entity :: struct {
     tile_moves_per_turn_current : s32;
 }
 
+TileType :: enum {
+    DEFAULT;
+    OBSTACLE;
+}
+
 TileState :: enum {
     DEFAULT;
     ACTIVE;
@@ -165,6 +184,7 @@ TileState :: enum {
 
 Tile :: struct {
     id : s32;
+    tile_type: TileType;
     tile_state: TileState;
     pos : Vector2;
     sprite_rect : Rectangle;
@@ -243,6 +263,7 @@ main :: () {
 
                 tile := New(Tile);
                 tile.id = read_then_increment(*global_tile_id_counter);
+                tile.tile_type = .DEFAULT;
                 tile.tile_state = .DEFAULT;
                 tile.pos = Vector2.{ north.x, north.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.25 }; // 25% because the actual sprite height is only half its tile height
                 tile.bounding_points = .[north, east, south, west];
@@ -328,12 +349,14 @@ main :: () {
         active_entity = cleaners[0],
     };
 
-    // TODO: probably don't leave this here
     tile_id_to_move_count_remaining : Table(s32, s32);
     tile_id_to_move_count_remaining.allocator = temp;
+    init(*tile_id_to_move_count_remaining);
+    defer deinit(*tile_id_to_move_count_remaining);
 
     while !WindowShouldClose() {
-        defer reset_temporary_storage();
+        reset_temporary_storage();
+        table_reset(*tile_id_to_move_count_remaining);
 
         time := GetTime();
         dt   := GetFrameTime();
@@ -342,33 +365,40 @@ main :: () {
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
 
+        print_vars(game_state);
+
         // Populate moveable boundary for active entity
         if game_state.active_entity != null {
             // Check if there is a neighboring tile to the North. If there is, check if it can be inhabited. If so,
             // mark it down as part of the valid tile ids, and also mark down in a table the moves that would
             // be available if moved to that tile.
-            check_if_neighbor_exists :: (tile: *Tile, dx: float32, dy: float32) -> neighbor_exists: bool, neighbor: *Tile {
+            check_if_neighbor_can_be_to_moved_to :: (tile: *Tile, dx: float32, dy: float32) -> (is_valid: bool, neighbor: *Tile) {
                 neighbor_pos := Vector2.{ tile.pos.x + dx, tile.pos.y + dy };
+
+                // First get a pointer to the thing if it exists
                 neighbor_exists, neighbor := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
-                return neighbor_exists, neighbor;
+
+                if !neighbor_exists { return false, null; }
+
+                // If it does exist, then check that there isn't anything on it
+                if neighbor.tile_type == .OBSTACLE { return false, null; }
+                
+                found_cleaner, _ := find_entity_on_tile_by_pos(neighbor_pos, cleaners);
+                if found_cleaner { return false, null; }
+
+                found_dish, _ := find_entity_on_tile_by_pos(neighbor_pos, dishes);
+                if found_dish { return false, null; }
+
+                return true, neighbor;
             }
- 
-            TILE_DIRECTION_DELTAS :: [2]float32.[
-                .[0.0, -TILE_WORLD_HEIGHT],  // north
-                .[0.0, +TILE_WORLD_HEIGHT],  // south
-                .[+TILE_WORLD_WIDTH, 0.0],   // east
-                .[-TILE_WORLD_WIDTH, 0.0],   // west
-                .[+TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50], // north east
-                .[-TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50], // north west
-                .[+TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50], // south east
-                .[-TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50], // south west
-            ];
 
             populate_moveable_tiles :: (tile: *Tile, moves_remaining: s32, tile_id_to_move_count_remaining: *Table) {
+                print("before\n");
+                table_print(tile_id_to_move_count_remaining);
                 for TILE_DIRECTION_DELTAS {
-                    neighbor_exists, neighbor := check_if_neighbor_exists(tile, it[0], it[1]);
+                    neighbor_valid, neighbor := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
 
-                    if neighbor_exists {
+                    if neighbor_valid {
                         neighbor_already_visited := table_contains(tile_id_to_move_count_remaining, neighbor.id);
                         
                         if !neighbor_already_visited {
@@ -376,11 +406,13 @@ main :: () {
                         }
                     }
                 }
+                print("after\n");
+                table_print(tile_id_to_move_count_remaining);
 
                 moves_remaining -= 1;
                 if moves_remaining >= 0 {
                     for TILE_DIRECTION_DELTAS {
-                        found_next_tile, next_tile := query_tile_by_pos(Vector2.{ tile.pos.x + it[0], tile.pos.y + it[1], });
+                        found_next_tile, next_tile := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
                         if !found_next_tile continue;
 
                         populate_moveable_tiles(next_tile, moves_remaining, tile_id_to_move_count_remaining);
@@ -391,8 +423,6 @@ main :: () {
             starting_tile   := get_tile_by_pos(game_state.active_entity.pos);
             moves_remaining := game_state.active_entity.tile_moves_per_turn_current - 1;
             populate_moveable_tiles(starting_tile, moves_remaining, *tile_id_to_move_count_remaining);
-
-            // table_print(tile_id_to_move_count_remaining);
         }
 
         //
@@ -558,7 +588,6 @@ main :: () {
 
                 // Draw tiles
                 {
-                    target_tile_tint: Color;
                     for tile: tiles {
                         tint: Color;
                         // Determine tile tint
@@ -570,11 +599,7 @@ main :: () {
 
                             // Limit the tiles drawn to the amount the entity can move
                             tile_is_in_move_bounds := table_contains(*tile_id_to_move_count_remaining, tile.id);
-                            if tile_is_in_move_bounds { tint = LIME; }
-                            // else if target_tile != null && tile.id == target_tile.id {
-                            //     tint = RED;
-                            //     target_tile_tint = tint;
-                            // }
+                            if tile_is_in_move_bounds { tint = GREEN; }
                         }
 
                         DrawTexturePro(
@@ -605,17 +630,16 @@ main :: () {
                             target_tile.sprite_rect,
                             Vector2.{ 0, 0 },
                             0.0,
-                            // GRAY,
-                            target_tile_tint
+                            GRAY,
                         );
                     }
                 }
 
                 // Draw dishes
-                for dish: dishes draw_entity(dish);
+                for dish: dishes { draw_entity(dish); }
 
                 // Draw cleaners
-                for cleaner: cleaners draw_entity(cleaner);
+                for cleaner: cleaners { draw_entity(cleaner); }
             }
 
             // Draw UI
@@ -632,8 +656,6 @@ main :: () {
                     did_find_dish, dish := find_entity_on_tile_by_pos(target_tile.pos, dishes);
 
                     entity := ifx did_find_cleaner then cleaner else ifx did_find_dish then dish else null;
-
-                    print_vars(entity);
 
                     if (did_find_cleaner || did_find_dish) && (game_state.active_entity == null || entity.id != game_state.active_entity.id) {
                         draw_entity_stats(entity, *stat_windows_drawn);
@@ -681,7 +703,7 @@ get_tile_pos_by_id :: (id: s32) -> Vector2 {
     return tiles[id].pos; // TODO: this will probably not work if/when tiles can be changed
 }
 
-query_tile_by_pos :: (pos: Vector2) -> (tile_exists: bool, tile: *Tile) {
+find_tile_by_pos :: (pos: Vector2) -> (tile_exists: bool, tile: *Tile) {
     tile_exists, tile := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(pos));
     return tile_exists, tile;
 }
