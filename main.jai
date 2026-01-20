@@ -342,6 +342,7 @@ main :: () {
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
 
+        // Populate moveable boundary for active entity
         if game_state.active_entity != null {
             // Check if there is a neighboring tile to the North. If there is, check if it can be inhabited. If so,
             // mark it down as part of the valid tile ids, and also mark down in a table the moves that would
@@ -363,15 +364,35 @@ main :: () {
                 .[-TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50], // south west
             ];
 
-            starting_tile := get_tile_by_pos(game_state.active_entity.pos);
-            moves_remaining := game_state.active_entity.tile_moves_per_turn_current - 1;
+            populate_moveable_tiles :: (tile: *Tile, moves_remaining: s32, tile_id_to_move_count_remaining: *Table) {
+                for TILE_DIRECTION_DELTAS {
+                    neighbor_exists, neighbor := check_if_neighbor_exists(tile, it[0], it[1]);
 
-            for TILE_DIRECTION_DELTAS {
-                neighbor_exists, neighbor := check_if_neighbor_exists(starting_tile, it[0], it[1]);
-                if neighbor_exists { table_set(*tile_id_to_move_count_remaining, neighbor.id, moves_remaining); }
+                    if neighbor_exists {
+                        neighbor_already_visited := table_contains(tile_id_to_move_count_remaining, neighbor.id);
+                        
+                        if !neighbor_already_visited {
+                            table_set(tile_id_to_move_count_remaining, neighbor.id, moves_remaining);
+                        }
+                    }
+                }
+
+                moves_remaining -= 1;
+                if moves_remaining >= 0 {
+                    for TILE_DIRECTION_DELTAS {
+                        found_next_tile, next_tile := query_tile_by_pos(Vector2.{ tile.pos.x + it[0], tile.pos.y + it[1], });
+                        if !found_next_tile continue;
+
+                        populate_moveable_tiles(next_tile, moves_remaining, tile_id_to_move_count_remaining);
+                    }
+                }
             }
 
-            table_print(tile_id_to_move_count_remaining);
+            starting_tile   := get_tile_by_pos(game_state.active_entity.pos);
+            moves_remaining := game_state.active_entity.tile_moves_per_turn_current - 1;
+            populate_moveable_tiles(starting_tile, moves_remaining, *tile_id_to_move_count_remaining);
+
+            // table_print(tile_id_to_move_count_remaining);
         }
 
         //
@@ -547,16 +568,9 @@ main :: () {
                                 case .ACTIVE;  tint = GOLD;
                             }
 
-                            // // Limit the tiles drawn to the amount the entity can move
-                            // tile_path_view := tile_path;
-                            // tile_path_view.count = ifx game_state.active_entity == null
-                            //     then tile_path.count
-                            //     else min(tile_path.count, game_state.active_entity.tile_moves_per_turn_current);
-
-                            // tile_is_in_path, _ := array_find(tile_path_view, tile.id);
-                            // if tile_is_in_path {
-                            //     tint = LIME;
-                            // }
+                            // Limit the tiles drawn to the amount the entity can move
+                            tile_is_in_move_bounds := table_contains(*tile_id_to_move_count_remaining, tile.id);
+                            if tile_is_in_move_bounds { tint = LIME; }
                             // else if target_tile != null && tile.id == target_tile.id {
                             //     tint = RED;
                             //     target_tile_tint = tint;
@@ -665,6 +679,11 @@ is_entity_on_tile :: (entity: Entity, tile: Tile) -> bool {
 
 get_tile_pos_by_id :: (id: s32) -> Vector2 {
     return tiles[id].pos; // TODO: this will probably not work if/when tiles can be changed
+}
+
+query_tile_by_pos :: (pos: Vector2) -> (tile_exists: bool, tile: *Tile) {
+    tile_exists, tile := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(pos));
+    return tile_exists, tile;
 }
 
 get_tile_by_pos :: (pos: Vector2) -> *Tile {
