@@ -341,7 +341,16 @@ main :: () {
 
     // Initialize dishes
     {
-        // create_entity(.DIRTY_PLATE, tile_id_to_spawn_on);
+        create_entity(.DIRTY_PLATE, 0);
+        create_entity(.DIRTY_PLATE, 10);
+        create_entity(.DIRTY_PLATE, 20);
+        create_entity(.DIRTY_PLATE, 30);
+        create_entity(.DIRTY_PLATE, 40);
+        create_entity(.DIRTY_PLATE, 50);
+        create_entity(.DIRTY_PLATE, 60);
+        create_entity(.DIRTY_PLATE, 70);
+        create_entity(.DIRTY_PLATE, 80);
+        create_entity(.DIRTY_PLATE, 90);
     }
 
     // Initialize cleaners
@@ -871,11 +880,11 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
             array_add(*cleaners, entity);
         // TODO
         case .FAUCET;
-            entity.texture_map_source_pos = Vector2.{ 0, 1 };
+            entity.texture_map_source_pos = Vector2.{ 0, 2 };
             array_add(*cleaners, entity);
 
         case .TOWEL;
-            entity.texture_map_source_pos = Vector2.{ 0, 1 };
+            entity.texture_map_source_pos = Vector2.{ 0, 3 };
             array_add(*cleaners, entity);
     }
 
