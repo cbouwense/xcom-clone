@@ -74,6 +74,17 @@ init_textures :: () {
 // Sprites
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+sprite_end_turn : Sprite;
+
+init_sprites :: () {
+    sprite_end_turn = Sprite.{
+        tilemap     = tilemap_texture_general,
+        active      = true,
+        first_frame = 0,
+        color       = WHITE,
+    };
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -82,9 +93,9 @@ move_camera_up    : bool;
 move_camera_down  : bool;
 move_camera_left  : bool;
 move_camera_right : bool;
-go_to_next_phase  : bool;
-select_entity_on_tile  : bool;
-execute_action_on_tile : bool;
+try_to_go_to_next_phase : bool;
+select_entity_on_tile   : bool;
+execute_action_on_tile  : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -149,6 +160,8 @@ TILE_DIRECTION_DELTAS :: [2]float32.[
 EntityType :: enum {
     DIRTY_PLATE;
     SPONGE;
+    FAUCET;
+    TOWEL;
 }
 
 Entity :: struct {
@@ -225,6 +238,14 @@ main :: () {
     data_folder = join(base_path, "data");
 
     init_textures();
+    init_sprites();
+
+    // Initialize font
+    {
+        font := GetFontDefault();
+        font.baseSize = 3;
+        GuiSetFont(font);
+    }
 
     // Initialize controls
     controls: Controls;
@@ -320,20 +341,14 @@ main :: () {
 
     // Initialize dishes
     {
-        tile_id_to_spawn_on : s32 = 0;
-        while tile_id_to_spawn_on < MAP_ROW_COUNT*MAP_COL_COUNT-1 {
-            create_entity(.DIRTY_PLATE, tile_id_to_spawn_on);
-            tile_id_to_spawn_on += MAP_COL_COUNT * 2;
-        }
+        // create_entity(.DIRTY_PLATE, tile_id_to_spawn_on);
     }
 
     // Initialize cleaners
     {
-        tile_id_to_spawn_on : s32 = MAP_ROW_COUNT-1;
-        while tile_id_to_spawn_on < MAP_ROW_COUNT*MAP_COL_COUNT-1 {
-            create_entity(.SPONGE, tile_id_to_spawn_on);
-            tile_id_to_spawn_on += MAP_COL_COUNT * 2;
-        }
+        create_entity(.SPONGE, 29);
+        create_entity(.FAUCET, 49);
+        create_entity(.TOWEL,  69);
     }
 
     // Initialize camera
@@ -433,7 +448,7 @@ main :: () {
             move_camera_down  = control_is_down(controls.move_camera_down);
             move_camera_left  = control_is_down(controls.move_camera_left);
             move_camera_right = control_is_down(controls.move_camera_right);
-            go_to_next_phase  = control_is_pressed(controls.go_to_next_phase);
+            try_to_go_to_next_phase  = control_is_pressed(controls.go_to_next_phase);
             select_entity_on_tile  = control_is_pressed(controls.select_entity_on_tile);
             execute_action_on_tile = control_is_pressed(controls.execute_action_on_tile);
 
@@ -497,19 +512,8 @@ main :: () {
                 if !hovering_over_tile { target_tile = null; }
             }
 
-            if go_to_next_phase {
-                tile := get_tile_by_pos(game_state.active_entity.pos);
-
-                tile.tile_state = .DEFAULT;
-
-                if #complete game_state.phase == {
-                    case .CLEANERS;
-                        game_state.phase = .DISHES;
-                        game_state.active_entity = dishes[0];
-                    case .DISHES;
-                        game_state.phase = .CLEANERS;
-                        game_state.active_entity = cleaners[0];
-                }
+            if try_to_go_to_next_phase {
+                go_to_next_phase(*game_state);
             }
             else if select_entity_on_tile {
                 if hovering_over_tile {
@@ -660,6 +664,31 @@ main :: () {
                         draw_entity_stats(entity, *stat_windows_drawn);
                     }
                 }
+
+                // Draw end turn button
+                {
+                    end_turn_margin :: 20;
+
+                    screen_width   := GetScreenWidth();
+                    screen_height  := GetScreenHeight();
+
+                    end_turn_width  := screen_width  * 0.10;
+                    end_turn_height := screen_height * 0.10;
+
+                    end_turn_rect  := Rectangle.{
+                        screen_width  - end_turn_width  - end_turn_margin,
+                        screen_height - end_turn_height - end_turn_margin,
+                        end_turn_width,
+                        end_turn_height,
+                    };
+
+                    try_to_end_turn := GuiButton(end_turn_rect, "End turn");
+
+                    if try_to_end_turn {
+                        go_to_next_phase(*game_state);
+                    }
+                }
+                // If there are no more moves left for the cleaners
             }
 
             // Draw debug
@@ -667,6 +696,22 @@ main :: () {
                 DrawFPS(10, 10);
             }
         }
+    }
+}
+
+go_to_next_phase :: (game_state: *GameState) {
+    // TODO: I kinda hate this, this should just be derivable from the game state, it shouldn't have to be
+    // manually set like this.
+    // tile := get_tile_by_pos(game_state.active_entity.pos);
+    // tile.tile_state = .DEFAULT;
+
+    if #complete game_state.phase == {
+        case .CLEANERS;
+            game_state.phase = .DISHES;
+            game_state.active_entity = dishes[0];
+        case .DISHES;
+            game_state.phase = .CLEANERS;
+            game_state.active_entity = cleaners[0];
     }
 }
 
@@ -766,7 +811,9 @@ get_draw_info_for_entity :: (entity: Entity) -> texture: Texture, source: Rectan
     if #complete entity.type == {
         // TODO: DRY up?
         case .DIRTY_PLATE; #through;
-        case .SPONGE;
+        case .SPONGE; #through;
+        case .FAUCET; #through;
+        case .TOWEL;
             map_texture := tilemap_texture_dishes;
 
             map_source := Rectangle.{
@@ -820,6 +867,14 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
             array_add(*dishes, entity);
 
         case .SPONGE;
+            entity.texture_map_source_pos = Vector2.{ 0, 1 };
+            array_add(*cleaners, entity);
+        // TODO
+        case .FAUCET;
+            entity.texture_map_source_pos = Vector2.{ 0, 1 };
+            array_add(*cleaners, entity);
+
+        case .TOWEL;
             entity.texture_map_source_pos = Vector2.{ 0, 1 };
             array_add(*cleaners, entity);
     }
