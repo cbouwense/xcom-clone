@@ -125,22 +125,17 @@ GameState :: struct {
     active_entity : *Entity;
 }
 
-DishState :: enum {
-    DECIDING;
-    MOVING;
-    FINISHED;
-}
-
-Direction :: enum {
-    NORTH;
-    NORTH_EAST;
-    NORTH_WEST;
-    SOUTH;
-    SOUTH_EAST;
-    SOUTH_WEST;
-    EAST;
-    WEST;
-    CENTER; // essentially no direction
+Direction :: enum u8 #specified {
+    NORTH      :: 1;
+    NORTH_EAST :: 2;
+    NORTH_WEST :: 3;
+    SOUTH      :: 4;
+    SOUTH_EAST :: 5;
+    SOUTH_WEST :: 6;
+    EAST       :: 7;
+    WEST       :: 8;
+    CENTER     :: 9;  // essentially no direction
+    COUNT      :: 10; // helper value that explicitly stores the enum length
 }
 
 TILE_DIRECTION_DELTAS :: [2]float32.[
@@ -152,6 +147,7 @@ TILE_DIRECTION_DELTAS :: [2]float32.[
     .[-TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50], // north west
     .[+TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50], // south east
     .[-TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50], // south west
+    .[0.0, 0.0], // center
 ];
 
 EntityType :: enum {
@@ -168,8 +164,6 @@ Entity :: struct {
     id   : s32;
     type : EntityType;
     pos : Vector2;
-
-    dish_state : DishState; // Yeah it's in all entities. Cry about it!!
 
     bounding_rect  : Rectangle; // Used for collision
     sprite_rect    : Rectangle;
@@ -245,15 +239,15 @@ main :: () {
     // Initialize controls
     controls: Controls;
     {
-        controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP             };
-        controls.move_camera_up[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W              };
-        controls.move_camera_down[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN           };
-        controls.move_camera_down[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S              };
-        controls.move_camera_left[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT           };
-        controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A              };
-        controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT          };
-        controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D              };
-        controls.go_to_next_phase[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_N              };
+        controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
+        controls.move_camera_up[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W     };
+        controls.move_camera_down[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN  };
+        controls.move_camera_down[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S     };
+        controls.move_camera_left[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT  };
+        controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
+        controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
+        controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
+        controls.go_to_next_phase[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_N     };
         controls.select_entity_on_tile[0]  = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT  };
         controls.execute_action_on_tile[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
     }
@@ -307,8 +301,8 @@ main :: () {
  
             add_neighbor_if_it_exists(tile, neighbor_list, 0.0, -TILE_WORLD_HEIGHT); // north
             add_neighbor_if_it_exists(tile, neighbor_list, 0.0, +TILE_WORLD_HEIGHT); // south
-            add_neighbor_if_it_exists(tile, neighbor_list, +TILE_WORLD_WIDTH, 0.0); // east
-            add_neighbor_if_it_exists(tile, neighbor_list, -TILE_WORLD_WIDTH, 0.0); // west
+            add_neighbor_if_it_exists(tile, neighbor_list, +TILE_WORLD_WIDTH, 0.0);  // east
+            add_neighbor_if_it_exists(tile, neighbor_list, -TILE_WORLD_WIDTH, 0.0);  // west
             add_neighbor_if_it_exists(tile, neighbor_list, +TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50); // north east
             add_neighbor_if_it_exists(tile, neighbor_list, -TILE_WORLD_WIDTH * 0.50, -TILE_WORLD_HEIGHT * 0.50); // north west
             add_neighbor_if_it_exists(tile, neighbor_list, +TILE_WORLD_WIDTH * 0.50, +TILE_WORLD_HEIGHT * 0.50); // south east
@@ -336,16 +330,15 @@ main :: () {
 
     // Initialize dishes
     {
-        create_entity(.DISH_DIRTY, 0);
-        create_entity(.DISH_DIRTY, 10);
-        create_entity(.DISH_DIRTY, 20);
-        create_entity(.DISH_DIRTY, 30);
-        create_entity(.DISH_DIRTY, 40);
-        create_entity(.DISH_DIRTY, 50);
-        create_entity(.DISH_DIRTY, 60);
-        create_entity(.DISH_DIRTY, 70);
-        create_entity(.DISH_DIRTY, 80);
-        create_entity(.DISH_DIRTY, 90);
+        create_entity(.DISH_DIRTY, 34);
+        create_entity(.DISH_DIRTY, 44);
+        create_entity(.DISH_DIRTY, 45);
+        create_entity(.DISH_DIRTY, 53);
+        create_entity(.DISH_DIRTY, 54);
+        create_entity(.DISH_DIRTY, 55);
+        create_entity(.DISH_DIRTY, 64);
+        create_entity(.DISH_DIRTY, 65);
+        create_entity(.DISH_DIRTY, 74);
     }
 
     // Initialize cleaners
@@ -389,51 +382,6 @@ main :: () {
             // Check if there is a neighboring tile to the North. If there is, check if it can be inhabited. If so,
             // mark it down as part of the valid tile ids, and also mark down in a table the moves that would
             // be available if moved to that tile.
-            check_if_neighbor_can_be_to_moved_to :: (tile: *Tile, dx: float32, dy: float32) -> (is_valid: bool, neighbor: *Tile) {
-                neighbor_pos := Vector2.{ tile.pos.x + dx, tile.pos.y + dy };
-
-                // First get a pointer to the thing if it exists
-                neighbor_exists, neighbor := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
-
-                if !neighbor_exists { return false, null; }
-
-                // If it does exist, then check that there isn't anything on it
-                if neighbor.tile_type == .OBSTACLE { return false, null; }
-                
-                found_cleaner, _ := find_entity_on_tile_by_pos(neighbor_pos, cleaners);
-                if found_cleaner { return false, null; }
-
-                found_dish, _ := find_entity_on_tile_by_pos(neighbor_pos, dishes);
-                if found_dish { return false, null; }
-
-                return true, neighbor;
-            }
-
-            populate_moveable_tiles :: (tile: *Tile, moves_remaining: s32, tile_id_to_move_count_remaining: *Table) {
-                if moves_remaining < 0 return;
-
-                for TILE_DIRECTION_DELTAS {
-                    neighbor_valid, neighbor := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
-
-                    if neighbor_valid {
-                        neighbor_already_visited := table_contains(tile_id_to_move_count_remaining, neighbor.id);
-                        
-                        if !neighbor_already_visited {
-                            table_set(tile_id_to_move_count_remaining, neighbor.id, moves_remaining);
-                        }
-                    }
-                }
-
-                moves_remaining -= 1;
-                
-                for TILE_DIRECTION_DELTAS {
-                    found_next_tile, next_tile := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
-                    if !found_next_tile continue;
-
-                    populate_moveable_tiles(next_tile, moves_remaining, tile_id_to_move_count_remaining);
-                }
-            }
-
             starting_tile   := get_tile_by_pos(game_state.active_entity.pos);
             moves_remaining := game_state.active_entity.tile_moves_per_turn_current - 1;
             populate_moveable_tiles(starting_tile, moves_remaining, *tile_id_to_move_count_remaining);
@@ -534,22 +482,7 @@ main :: () {
                     else if execute_action_on_tile {
                         if hovering_over_tile {
                             if game_state.active_entity != null {
-                                tile := get_tile_by_pos(game_state.active_entity.pos);
-                                has_entry, move_count_remaining := table_find(*tile_id_to_move_count_remaining, target_tile.id);
-                                table_print(tile_id_to_move_count_remaining);
-                                print_vars(tile.*, has_entry, move_count_remaining);
-
-                                // Check if this tile is even within the active entity's range
-                                if has_entry {
-                                    // Change tile before movement back to default
-                                    tile.tile_state = .DEFAULT;
-
-                                    // Then, move the entity to the target tile
-                                    move_entity_instantaneously(game_state.active_entity, target_tile.id);
-
-                                    // Remove the amount of tiles moved from the entity's current count
-                                    game_state.active_entity.tile_moves_per_turn_current = move_count_remaining;
-                                }
+                                try_to_move_to_tile(game_state.active_entity, target_tile, *tile_id_to_move_count_remaining);
                             }
                         }
                     }
@@ -557,8 +490,35 @@ main :: () {
                 case .DISHES;
                     // Go through all the dishes and just move them around at random
                     for dish: dishes {
-                        if #complete dish.dish_state
+                        // First, decide a random number of tiles to move
+                        tiles_to_move := cast(int) random_get_within_range(0, xx dish.tile_moves_per_turn_current);
+
+                        // Next, decide which tile to move to by generating a series of random directions and
+                        // then executing them. Yeah idk, this is all I came up with, I gave myself a budget of
+                        // like 10 seconds to think about this.
+                        moves : [..] int;
+                        for 0..tiles_to_move {
+                            direction_as_int := cast(int) random_get_within_range(1, xx (Direction.COUNT-1));
+                            array_add(*moves, direction_as_int);
+                        }
+                        print_vars(dish.id, moves);
+
+                        // Then, try to execute that list of moves
+                        for move: moves {
+                            starting_tile := get_tile_by_pos(dish.pos);
+                            is_tile_valid, tile_to_move_to := check_if_neighbor_can_be_to_moved_to(
+                                starting_tile,
+                                TILE_DIRECTION_DELTAS[move][0],
+                                TILE_DIRECTION_DELTAS[move][1],
+                            );
+                            if !is_tile_valid continue;
+
+                            try_to_move_to_tile(dish, tile_to_move_to, *tile_id_to_move_count_remaining);
+                        }
                     }
+
+                    // Finally, relinquish the dish turn
+                    go_to_next_phase(*game_state);
             }
 
             // Update tiles
@@ -712,14 +672,84 @@ main :: () {
     }
 }
 
+check_if_neighbor_can_be_to_moved_to :: (tile: *Tile, dx: float32, dy: float32) -> (is_valid: bool, neighbor: *Tile) {
+    neighbor_pos := Vector2.{ tile.pos.x + dx, tile.pos.y + dy };
+
+    // First get a pointer to the thing if it exists
+    neighbor_exists, neighbor := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
+
+    if !neighbor_exists { return false, null; }
+
+    // If it does exist, then check that there isn't anything on it
+    if neighbor.tile_type == .OBSTACLE { return false, null; }
+    
+    found_cleaner, _ := find_entity_on_tile_by_pos(neighbor_pos, cleaners);
+    if found_cleaner { return false, null; }
+
+    found_dish, _ := find_entity_on_tile_by_pos(neighbor_pos, dishes);
+    if found_dish { return false, null; }
+
+    return true, neighbor;
+}
+
+populate_moveable_tiles :: (tile: *Tile, moves_remaining: s32, tile_id_to_move_count_remaining: *Table) {
+    if moves_remaining < 0 return;
+
+    for TILE_DIRECTION_DELTAS {
+        neighbor_valid, neighbor := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
+
+        if neighbor_valid {
+            neighbor_already_visited := table_contains(tile_id_to_move_count_remaining, neighbor.id);
+            
+            if !neighbor_already_visited {
+                table_set(tile_id_to_move_count_remaining, neighbor.id, moves_remaining);
+            }
+        }
+    }
+
+    moves_remaining -= 1;
+    
+    for TILE_DIRECTION_DELTAS {
+        found_next_tile, next_tile := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
+        if !found_next_tile continue;
+
+        populate_moveable_tiles(next_tile, moves_remaining, tile_id_to_move_count_remaining);
+    }
+}
+
+try_to_move_to_tile :: (entity: *Entity, tile: Tile, tile_id_to_move_count_remaining: *Table) {
+    assert(entity != null, "Tried to move a null entity!!!!!!");
+
+    starting_tile := get_tile_by_pos(entity.pos);
+    has_entry, move_count_remaining := table_find(tile_id_to_move_count_remaining, tile.id);
+
+    // Check if this tile is even within the active entity's range
+    if has_entry {
+        // Change tile before movement back to default
+        starting_tile.tile_state = .DEFAULT;
+
+        // Then, move the entity to the target tile
+        move_entity_instantaneously(entity, tile.id);
+
+        // Remove the amount of tiles moved from the entity's current count
+        entity.tile_moves_per_turn_current = move_count_remaining;
+    }
+}
+
 go_to_next_phase :: (game_state: *GameState) {
     if #complete game_state.phase == {
         case .CLEANERS;
             game_state.phase = .DISHES;
             game_state.active_entity = dishes[0];
+            for dish: dishes {
+                dish.tile_moves_per_turn_current = dish.tile_moves_per_turn_max;
+            }
         case .DISHES;
             game_state.phase = .CLEANERS;
             game_state.active_entity = cleaners[0];
+             for cleaner: cleaners {
+                cleaner.tile_moves_per_turn_current = cleaner.tile_moves_per_turn_max;
+            }
     }
 }
 
@@ -879,7 +909,6 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
     entity.id            = read_then_increment(*global_id_counter);
     entity.type          = entity_type;
     entity.pos           = pos;
-    entity.dish_state    = .DECIDING;
     entity.bounding_rect = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
     entity.sprite_rect   = get_default_sprite_rect(on_tile_id);
     // entity.texture_map_source_pos is set conditionally below
