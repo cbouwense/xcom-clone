@@ -125,13 +125,10 @@ GameState :: struct {
     active_entity : *Entity;
 }
 
-UnitStatePhase :: enum {
+DishState :: enum {
     DECIDING;
-    ACTING;
-}
-
-UnitState :: struct {
-    phase : UnitStatePhase;
+    MOVING;
+    FINISHED;
 }
 
 Direction :: enum {
@@ -158,9 +155,9 @@ TILE_DIRECTION_DELTAS :: [2]float32.[
 ];
 
 EntityType :: enum {
-    PLATE_DIRTY;
-    PLATE_WET;
-    PLATE_DRY;
+    DISH_DIRTY;
+    DISH_WET;
+    DISH_DRY;
 
     SPONGE;
     FAUCET;
@@ -171,6 +168,8 @@ Entity :: struct {
     id   : s32;
     type : EntityType;
     pos : Vector2;
+
+    dish_state : DishState; // Yeah it's in all entities. Cry about it!!
 
     bounding_rect  : Rectangle; // Used for collision
     sprite_rect    : Rectangle;
@@ -337,16 +336,16 @@ main :: () {
 
     // Initialize dishes
     {
-        create_entity(.PLATE_DIRTY, 0);
-        create_entity(.PLATE_DIRTY, 10);
-        create_entity(.PLATE_DIRTY, 20);
-        create_entity(.PLATE_WET, 30);
-        create_entity(.PLATE_WET, 40);
-        create_entity(.PLATE_WET, 50);
-        create_entity(.PLATE_DRY, 60);
-        create_entity(.PLATE_DRY, 70);
-        create_entity(.PLATE_DRY, 80);
-        create_entity(.PLATE_DIRTY, 90);
+        create_entity(.DISH_DIRTY, 0);
+        create_entity(.DISH_DIRTY, 10);
+        create_entity(.DISH_DIRTY, 20);
+        create_entity(.DISH_DIRTY, 30);
+        create_entity(.DISH_DIRTY, 40);
+        create_entity(.DISH_DIRTY, 50);
+        create_entity(.DISH_DIRTY, 60);
+        create_entity(.DISH_DIRTY, 70);
+        create_entity(.DISH_DIRTY, 80);
+        create_entity(.DISH_DIRTY, 90);
     }
 
     // Initialize cleaners
@@ -453,9 +452,9 @@ main :: () {
             move_camera_down  = control_is_down(controls.move_camera_down);
             move_camera_left  = control_is_down(controls.move_camera_left);
             move_camera_right = control_is_down(controls.move_camera_right);
-            try_to_go_to_next_phase  = control_is_pressed(controls.go_to_next_phase);
-            select_entity_on_tile  = control_is_pressed(controls.select_entity_on_tile);
-            execute_action_on_tile = control_is_pressed(controls.execute_action_on_tile);
+            try_to_go_to_next_phase = control_is_pressed(controls.go_to_next_phase);
+            select_entity_on_tile   = control_is_pressed(controls.select_entity_on_tile);
+            execute_action_on_tile  = control_is_pressed(controls.execute_action_on_tile);
 
             camera.zoom += mouse_wheel_move * CAMERA_ZOOM_SPEED;
         }
@@ -474,37 +473,6 @@ main :: () {
                 camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
             }
 
-            // Update active entity selection
-            {
-                // First off, just assume that there is nothing to do here.
-                clicked_off_entities := false;
-                
-                if IsMouseButtonPressed(.MOUSE_BUTTON_LEFT) {
-                    // If the user has clicked this frame, then assume they clicked off of an entity.
-                    // Then check whether they clicked on any of the entities to prove that they did
-                    // click something.
-                    clicked_off_entities = true;
-
-                    for cleaner: cleaners {
-                        if CheckCollisionPointRec(mouse_pos_in_world, cleaner.sprite_rect) {
-                            clicked_off_entities = false;
-                            break;
-                        }
-                    }
-
-                    for dish: dishes {
-                        if CheckCollisionPointRec(mouse_pos_in_world, dish.sprite_rect) {
-                            clicked_off_entities = false;
-                            break;
-                        }
-                    }
-
-                    if clicked_off_entities {
-                        game_state.active_entity = null;
-                    }
-                }
-            }
-
             // Update target tile
             hovering_over_tile := false;
             {
@@ -517,40 +485,80 @@ main :: () {
                 if !hovering_over_tile { target_tile = null; }
             }
 
-            if try_to_go_to_next_phase {
-                go_to_next_phase(*game_state);
-            }
-            else if select_entity_on_tile {
-                if hovering_over_tile {
-                    if game_state.phase == .CLEANERS {
-                        found, new_active_cleaner := find_entity_on_tile_by_pos(target_tile.pos, cleaners);
-                        if found {
-                            game_state.active_entity = new_active_cleaner;
+            if #complete game_state.phase == {
+                case .CLEANERS;
+                    // Update active entity selection
+                    {
+                        // First off, just assume that there is nothing to do here.
+                        clicked_off_entities := false;
+                        
+                        if IsMouseButtonPressed(.MOUSE_BUTTON_LEFT) {
+                            // If the user has clicked this frame, then assume they clicked off of an entity.
+                            // Then check whether they clicked on any of the entities to prove that they did
+                            // click something.
+                            clicked_off_entities = true;
+
+                            for cleaner: cleaners {
+                                if CheckCollisionPointRec(mouse_pos_in_world, cleaner.sprite_rect) {
+                                    clicked_off_entities = false;
+                                    break;
+                                }
+                            }
+
+                            for dish: dishes {
+                                if CheckCollisionPointRec(mouse_pos_in_world, dish.sprite_rect) {
+                                    clicked_off_entities = false;
+                                    break;
+                                }
+                            }
+
+                            if clicked_off_entities {
+                                game_state.active_entity = null;
+                            }
                         }
                     }
-                }
-            } 
-            else if execute_action_on_tile {
-                if hovering_over_tile {
-                    if game_state.active_entity != null {
-                        tile := get_tile_by_pos(game_state.active_entity.pos);
-                        has_entry, move_count_remaining := table_find(*tile_id_to_move_count_remaining, target_tile.id);
-                        table_print(tile_id_to_move_count_remaining);
-                        print_vars(tile.*, has_entry, move_count_remaining);
 
-                        // Check if this tile is even within the active entity's range
-                        if has_entry {
-                            // Change tile before movement back to default
-                            tile.tile_state = .DEFAULT;
+                    if try_to_go_to_next_phase {
+                        go_to_next_phase(*game_state);
+                    }
+                    else if select_entity_on_tile {
+                        if hovering_over_tile {
+                            if game_state.phase == .CLEANERS {
+                                found, new_active_cleaner := find_entity_on_tile_by_pos(target_tile.pos, cleaners);
+                                if found {
+                                    game_state.active_entity = new_active_cleaner;
+                                }
+                            }
+                        }
+                    } 
+                    else if execute_action_on_tile {
+                        if hovering_over_tile {
+                            if game_state.active_entity != null {
+                                tile := get_tile_by_pos(game_state.active_entity.pos);
+                                has_entry, move_count_remaining := table_find(*tile_id_to_move_count_remaining, target_tile.id);
+                                table_print(tile_id_to_move_count_remaining);
+                                print_vars(tile.*, has_entry, move_count_remaining);
 
-                            // Then, move the entity to the target tile
-                            move_entity_instantaneously(game_state.active_entity, target_tile.id);
+                                // Check if this tile is even within the active entity's range
+                                if has_entry {
+                                    // Change tile before movement back to default
+                                    tile.tile_state = .DEFAULT;
 
-                            // Remove the amount of tiles moved from the entity's current count
-                            game_state.active_entity.tile_moves_per_turn_current = move_count_remaining;
+                                    // Then, move the entity to the target tile
+                                    move_entity_instantaneously(game_state.active_entity, target_tile.id);
+
+                                    // Remove the amount of tiles moved from the entity's current count
+                                    game_state.active_entity.tile_moves_per_turn_current = move_count_remaining;
+                                }
+                            }
                         }
                     }
-                }
+
+                case .DISHES;
+                    // Go through all the dishes and just move them around at random
+                    for dish: dishes {
+                        if #complete dish.dish_state
+                    }
             }
 
             // Update tiles
@@ -705,11 +713,6 @@ main :: () {
 }
 
 go_to_next_phase :: (game_state: *GameState) {
-    // TODO: I kinda hate this, this should just be derivable from the game state, it shouldn't have to be
-    // manually set like this.
-    // tile := get_tile_by_pos(game_state.active_entity.pos);
-    // tile.tile_state = .DEFAULT;
-
     if #complete game_state.phase == {
         case .CLEANERS;
             game_state.phase = .DISHES;
@@ -720,18 +723,18 @@ go_to_next_phase :: (game_state: *GameState) {
     }
 }
 
-PLATE_DIRTY_NAME :: "Dirty plate";
-PLATE_WET_NAME   :: "Wet plate";
-PLATE_DRY_NAME   :: "Dry plate";
+DISH_DIRTY_NAME :: "Dirty plate";
+DISH_WET_NAME   :: "Wet plate";
+DISH_DRY_NAME   :: "Dry plate";
 SPONGE_NAME      :: "Sponge";
 FAUCET_NAME      :: "Faucet";
 TOWEL_NAME       :: "Towel";
 
 entity_type_to_name :: (entity_type: EntityType) -> string {
     if #complete entity_type == {
-        case .PLATE_DIRTY; return PLATE_DIRTY_NAME;
-        case .PLATE_WET;   return PLATE_WET_NAME;
-        case .PLATE_DRY;   return PLATE_DRY_NAME;
+        case .DISH_DIRTY; return DISH_DIRTY_NAME;
+        case .DISH_WET;   return DISH_WET_NAME;
+        case .DISH_DRY;   return DISH_DRY_NAME;
         case .SPONGE;      return SPONGE_NAME;
         case .FAUCET;      return FAUCET_NAME;
         case .TOWEL;       return TOWEL_NAME;
@@ -833,9 +836,9 @@ array_unordered_remove_entity_by_id :: inline (array: *[] $Entity, item: Entity,
 get_draw_info_for_entity :: (entity: Entity) -> texture: Texture, source: Rectangle {
     if #complete entity.type == {
         // TODO: DRY up?
-        case .PLATE_DIRTY; #through;
-        case .PLATE_WET; #through;
-        case .PLATE_DRY; #through;
+        case .DISH_DIRTY; #through;
+        case .DISH_WET; #through;
+        case .DISH_DRY; #through;
         case .SPONGE; #through;
         case .FAUCET; #through;
         case .TOWEL;
@@ -873,25 +876,26 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
     pos := get_tile_pos_by_id(on_tile_id);
 
     entity := New(Entity);
-    entity.id                     = read_then_increment(*global_id_counter);
-    entity.type                   = entity_type;
-    entity.pos                    = pos;
-    entity.bounding_rect          = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
-    entity.sprite_rect            = get_default_sprite_rect(on_tile_id);
+    entity.id            = read_then_increment(*global_id_counter);
+    entity.type          = entity_type;
+    entity.pos           = pos;
+    entity.dish_state    = .DECIDING;
+    entity.bounding_rect = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
+    entity.sprite_rect   = get_default_sprite_rect(on_tile_id);
     // entity.texture_map_source_pos is set conditionally below
     entity.tile_moves_per_turn_max     = 2;
     entity.tile_moves_per_turn_current = 2;
 
     if #complete entity_type == {
-        case .PLATE_DIRTY;
+        case .DISH_DIRTY;
             entity.texture_map_source_pos = Vector2.{ 0, 0 };
             array_add(*dishes, entity);
 
-        case .PLATE_WET;
+        case .DISH_WET;
             entity.texture_map_source_pos = Vector2.{ 1, 0 };
             array_add(*dishes, entity);
 
-        case .PLATE_DRY;
+        case .DISH_DRY;
             entity.texture_map_source_pos = Vector2.{ 2, 0 };
             array_add(*dishes, entity);
 
