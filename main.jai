@@ -158,7 +158,10 @@ TILE_DIRECTION_DELTAS :: [2]float32.[
 ];
 
 EntityType :: enum {
-    DIRTY_PLATE;
+    PLATE_DIRTY;
+    PLATE_WET;
+    PLATE_DRY;
+
     SPONGE;
     FAUCET;
     TOWEL;
@@ -167,19 +170,12 @@ EntityType :: enum {
 Entity :: struct {
     id   : s32;
     type : EntityType;
-
     pos : Vector2;
-    vel : Vector2;
-
-    is_facing_south_east : bool;
 
     bounding_rect  : Rectangle; // Used for collision
     sprite_rect    : Rectangle;
 
     texture_map_source_pos : Vector2;
-
-    health_max     : float32;
-    health_current : float32;
 
     tile_moves_per_turn_max     : s32;
     tile_moves_per_turn_current : s32;
@@ -341,16 +337,16 @@ main :: () {
 
     // Initialize dishes
     {
-        create_entity(.DIRTY_PLATE, 0);
-        create_entity(.DIRTY_PLATE, 10);
-        create_entity(.DIRTY_PLATE, 20);
-        create_entity(.DIRTY_PLATE, 30);
-        create_entity(.DIRTY_PLATE, 40);
-        create_entity(.DIRTY_PLATE, 50);
-        create_entity(.DIRTY_PLATE, 60);
-        create_entity(.DIRTY_PLATE, 70);
-        create_entity(.DIRTY_PLATE, 80);
-        create_entity(.DIRTY_PLATE, 90);
+        create_entity(.PLATE_DIRTY, 0);
+        create_entity(.PLATE_DIRTY, 10);
+        create_entity(.PLATE_DIRTY, 20);
+        create_entity(.PLATE_WET, 30);
+        create_entity(.PLATE_WET, 40);
+        create_entity(.PLATE_WET, 50);
+        create_entity(.PLATE_DRY, 60);
+        create_entity(.PLATE_DRY, 70);
+        create_entity(.PLATE_DRY, 80);
+        create_entity(.PLATE_DIRTY, 90);
     }
 
     // Initialize cleaners
@@ -724,23 +720,41 @@ go_to_next_phase :: (game_state: *GameState) {
     }
 }
 
+PLATE_DIRTY_NAME :: "Dirty plate";
+PLATE_WET_NAME   :: "Wet plate";
+PLATE_DRY_NAME   :: "Dry plate";
+SPONGE_NAME      :: "Sponge";
+FAUCET_NAME      :: "Faucet";
+TOWEL_NAME       :: "Towel";
+
+entity_type_to_name :: (entity_type: EntityType) -> string {
+    if #complete entity_type == {
+        case .PLATE_DIRTY; return PLATE_DIRTY_NAME;
+        case .PLATE_WET;   return PLATE_WET_NAME;
+        case .PLATE_DRY;   return PLATE_DRY_NAME;
+        case .SPONGE;      return SPONGE_NAME;
+        case .FAUCET;      return FAUCET_NAME;
+        case .TOWEL;       return TOWEL_NAME;
+    }
+}
+
 draw_entity_stats :: (entity: Entity, stat_windows_drawn: *s32) {
     font_size : s32 = 20;
-    health_text := tprint("Health: % / %\0", entity.health_current, entity.health_max).data;
+    name_text := tprint("%\0", entity_type_to_name(entity.type)).data;
     moves_text  := tprint("Moves: % / %\0", entity.tile_moves_per_turn_current, entity.tile_moves_per_turn_max).data;
 
-    health_text_length := MeasureText(health_text, font_size);
+    name_text_length := MeasureText(name_text, font_size);
     moves_text_length  := MeasureText(moves_text,  font_size);
 
-    longest_text_length := max(health_text_length, moves_text_length);
+    longest_text_length := max(name_text_length, moves_text_length);
 
     margin_top := ifx stat_windows_drawn.* > 0 then 20 else 0;
     y_offset   := stat_windows_drawn.* * 100 + margin_top;
 
     DrawRectangleRounded(Rectangle.{ 20, xx (20 + y_offset), longest_text_length + 20.0, 100 }, 0.1, 0, Color.{ 18, 18, 18, 127 });
 
-    // Draw health
-    DrawText(health_text, 30, xx (30 + y_offset), font_size, WHITE);
+    // Draw name
+    DrawText(name_text, 30, xx (30 + y_offset), font_size, WHITE);
 
     // Draw moves
     DrawText(moves_text, 30, xx (50 + y_offset), font_size, WHITE);
@@ -819,7 +833,9 @@ array_unordered_remove_entity_by_id :: inline (array: *[] $Entity, item: Entity,
 get_draw_info_for_entity :: (entity: Entity) -> texture: Texture, source: Rectangle {
     if #complete entity.type == {
         // TODO: DRY up?
-        case .DIRTY_PLATE; #through;
+        case .PLATE_DIRTY; #through;
+        case .PLATE_WET; #through;
+        case .PLATE_DRY; #through;
         case .SPONGE; #through;
         case .FAUCET; #through;
         case .TOWEL;
@@ -860,19 +876,23 @@ create_entity :: (entity_type: EntityType, on_tile_id: s32) -> *Entity {
     entity.id                     = read_then_increment(*global_id_counter);
     entity.type                   = entity_type;
     entity.pos                    = pos;
-    entity.vel                    = Vector2.{};
-    entity.is_facing_south_east   = true; // TODO: ?
     entity.bounding_rect          = Rectangle.{ pos.x, pos.y, TILEMAP_DISHES_WORLD_WIDTH, TILEMAP_DISHES_WORLD_HEIGHT };
     entity.sprite_rect            = get_default_sprite_rect(on_tile_id);
     // entity.texture_map_source_pos is set conditionally below
-    entity.health_max             = 100.0;
-    entity.health_current         = 100.0;
     entity.tile_moves_per_turn_max     = 2;
     entity.tile_moves_per_turn_current = 2;
 
     if #complete entity_type == {
-        case .DIRTY_PLATE;
+        case .PLATE_DIRTY;
             entity.texture_map_source_pos = Vector2.{ 0, 0 };
+            array_add(*dishes, entity);
+
+        case .PLATE_WET;
+            entity.texture_map_source_pos = Vector2.{ 1, 0 };
+            array_add(*dishes, entity);
+
+        case .PLATE_DRY;
+            entity.texture_map_source_pos = Vector2.{ 2, 0 };
             array_add(*dishes, entity);
 
         case .SPONGE;
