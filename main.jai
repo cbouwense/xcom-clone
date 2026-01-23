@@ -350,8 +350,8 @@ main :: () {
 
     // Initialize camera
     camera: Camera2D;
-    camera.target   = tiles[50].bounding_points[BOUNDING_POINT_INDEX_EAST];
-    camera.offset   = Vector2.{};
+    camera.target   = Vector2.{ 200, 180 };
+    camera.offset   = Vector2.{ 800, 450 };
     camera.rotation = 0.0;
     camera.zoom     = 2;
 
@@ -382,9 +382,7 @@ main :: () {
             // Check if there is a neighboring tile to the North. If there is, check if it can be inhabited. If so,
             // mark it down as part of the valid tile ids, and also mark down in a table the moves that would
             // be available if moved to that tile.
-            starting_tile   := get_tile_by_pos(game_state.active_entity.pos);
-            moves_remaining := game_state.active_entity.tile_moves_per_turn_current - 1;
-            populate_moveable_tiles(starting_tile, moves_remaining, *tile_id_to_move_count_remaining);
+            populate_moveable_tiles(game_state.active_entity, *tile_id_to_move_count_remaining);
         }
 
         //
@@ -490,32 +488,29 @@ main :: () {
                 case .DISHES;
                     // Go through all the dishes and just move them around at random
                     for dish: dishes {
-                        // First, decide a random number of tiles to move
-                        tiles_to_move := cast(int) random_get_within_range(0, xx dish.tile_moves_per_turn_current);
+                        populate_moveable_tiles(dish, *tile_id_to_move_count_remaining);
 
-                        // Next, decide which tile to move to by generating a series of random directions and
-                        // then executing them. Yeah idk, this is all I came up with, I gave myself a budget of
-                        // like 10 seconds to think about this.
-                        moves : [..] int;
-                        for 0..tiles_to_move {
-                            direction_as_int := cast(int) random_get_within_range(1, xx (Direction.COUNT-1));
-                            array_add(*moves, direction_as_int);
-                        }
-                        print_vars(dish.id, moves);
+                        // while tile_id_to_move_count_remaining.entries.count > 0 {
+                        iteration_count := cast(int) random_get_within_range(0, xx (tile_id_to_move_count_remaining.count-2));
+                        print("dish % move_count %\n", dish.id, tile_id_to_move_count_remaining.count);
 
-                        // Then, try to execute that list of moves
-                        for move: moves {
-                            starting_tile := get_tile_by_pos(dish.pos);
-                            is_tile_valid, tile_to_move_to := check_if_neighbor_can_be_to_moved_to(
-                                starting_tile,
-                                TILE_DIRECTION_DELTAS[move][0],
-                                TILE_DIRECTION_DELTAS[move][1],
-                            );
-                            if !is_tile_valid continue;
+                        assert(iteration_count < tile_id_to_move_count_remaining.count);
+                        // We can't directly index into the table, so we have to for expand it and do a set number
+                        // of iterations to accomplish the same idea. This is probably terribly slow.
+                        for tile_id_to_move_count_remaining {
+                            // print("")
+                            if iteration_count > 0 {
+                                iteration_count -= 1;
+                                continue;
+                            }
 
-                            try_to_move_to_tile(dish, tile_to_move_to, *tile_id_to_move_count_remaining);
+                            tile_id, moves_remaining_after_moving := it_index, it;
+                            print("dish % moving to tile %\n", dish.id, tile_id);
+                            try_to_move_to_tile(dish, tiles[tile_id], *tile_id_to_move_count_remaining);
+                            break;
                         }
                     }
+                    print("=============\n");
 
                     // Finally, relinquish the dish turn
                     go_to_next_phase(*game_state);
@@ -692,7 +687,15 @@ check_if_neighbor_can_be_to_moved_to :: (tile: *Tile, dx: float32, dy: float32) 
     return true, neighbor;
 }
 
-populate_moveable_tiles :: (tile: *Tile, moves_remaining: s32, tile_id_to_move_count_remaining: *Table) {
+populate_moveable_tiles :: (entity: *Entity, tile_id_to_move_count_remaining: *Table) {
+    table_reset(tile_id_to_move_count_remaining);
+    starting_tile   := get_tile_by_pos(entity.pos);
+    moves_remaining := entity.tile_moves_per_turn_current - 1;
+    populate_moveable_tiles_step(starting_tile, moves_remaining, tile_id_to_move_count_remaining);
+}
+
+populate_moveable_tiles_step :: (tile: *Tile, moves_remaining: s32, tile_id_to_move_count_remaining: *Table) {
+
     if moves_remaining < 0 return;
 
     for TILE_DIRECTION_DELTAS {
@@ -713,7 +716,7 @@ populate_moveable_tiles :: (tile: *Tile, moves_remaining: s32, tile_id_to_move_c
         found_next_tile, next_tile := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
         if !found_next_tile continue;
 
-        populate_moveable_tiles(next_tile, moves_remaining, tile_id_to_move_count_remaining);
+        populate_moveable_tiles_step(next_tile, moves_remaining, tile_id_to_move_count_remaining);
     }
 }
 
@@ -726,7 +729,7 @@ try_to_move_to_tile :: (entity: *Entity, tile: Tile, tile_id_to_move_count_remai
     // Check if this tile is even within the active entity's range
     if has_entry {
         // Change tile before movement back to default
-        starting_tile.tile_state = .DEFAULT;
+        starting_tile.tile_state = .DEFAULT; // TODO: terrible
 
         // Then, move the entity to the target tile
         move_entity_instantaneously(entity, tile.id);
@@ -741,14 +744,14 @@ go_to_next_phase :: (game_state: *GameState) {
         case .CLEANERS;
             game_state.phase = .DISHES;
             game_state.active_entity = dishes[0];
-            for dish: dishes {
-                dish.tile_moves_per_turn_current = dish.tile_moves_per_turn_max;
+            for cleaner: cleaners {
+                cleaner.tile_moves_per_turn_current = cleaner.tile_moves_per_turn_max;
             }
         case .DISHES;
             game_state.phase = .CLEANERS;
             game_state.active_entity = cleaners[0];
-             for cleaner: cleaners {
-                cleaner.tile_moves_per_turn_current = cleaner.tile_moves_per_turn_max;
+            for dish: dishes {
+                dish.tile_moves_per_turn_current = dish.tile_moves_per_turn_max;
             }
     }
 }
